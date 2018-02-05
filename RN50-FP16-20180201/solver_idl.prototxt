@@ -1,0 +1,43 @@
+net: "train_val_idl.prototxt"
+
+test_iter: 1042          # 50000/48
+test_interval: 125000     # 2 epoch
+test_initialization: false
+
+test_and_snapshot_last_epochs: 6
+
+larc: true
+larc_eta: 0.002
+larc_policy: "clip"
+
+display: 100
+max_iter: 110000         # 88 epoch
+
+base_lr: 1 
+
+lr_policy: "poly"
+power: 2.0
+momentum: 0.9
+weight_decay: 0.0001 
+
+snapshot: 1000000
+snapshot_prefix: "../snapshots/resnet50-0.16.6-idl-fp16-88ep_10526"
+snapshot_after_train: false
+
+solver_mode: GPU
+#random_seed: 1371
+
+solver_data_type: FLOAT16
+
+type: "SGD"
+
+# Train dataset size = 1,281,167
+# Test dataset size  =    50,000
+
+# batch 64  --> epoch = 20,000
+# batch 96  --> epoch = 15,000
+# batch 128 --> epoch = 10,000
+# batch 256 --> epoch =  5,000
+# batch 512 --> epoch =  
+
+
