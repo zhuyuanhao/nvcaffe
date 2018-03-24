@@ -1,0 +1,38 @@
+net: "train_val_fp16_2048.prototxt"
+
+solver_data_type: FLOAT16
+test_and_snapshot_last_epochs: 5
+
+base_lr: 1
+min_lr: 1.e-5
+
+larc: true
+larc_policy: "clip"
+larc_eta: 0.0023
+
+test_iter: 1042
+test_interval: 200000 # 2250
+
+lr_policy: "poly"
+power: 2
+display: 100
+
+max_iter: 56875 
+
+momentum: 0.9
+weight_decay: 0.0005
+snapshot: 1500000
+snapshot_prefix: "snapshots/alexnet_fp16_2K.91ep.0023"
+solver_mode: GPU
+snapshot_after_train: false
+
+# batch 64  --> epoch = 20,000
+# batch 96  --> epoch = 15,000
+# batch 128 --> epoch = 10,000
+# batch 256 --> epoch =  5,000
+# batch 512 --> epoch =  2,500
+# 1024 1250
+#2048 625
+#4096  315
+#8192  160
+#16384 80
