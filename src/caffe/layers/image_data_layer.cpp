@@ -220,14 +220,14 @@ bool ImageDataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, size_
 
     if (cv_img.data) {
       int offset = batch->data_->offset(item_id);
-#if defined(USE_CUDNN)
-      this->bdt(thread_id)->Transform(cv_img, prefetch_data + offset, buf_len, false);
-#else
+//#if defined(USE_CUDNN)
+//      this->bdt(thread_id)->Transform(cv_img, prefetch_data + offset, buf_len, false);
+//#else
       CHECK_EQ(buf_len, tmp.size());
-      this->bdt(thread_id)->Transform(cv_img, prefetch_data + offset, buf_len, false);
+      this->bdt(thread_id)->Transform(cv_img, tmp.data(), buf_len, false);
       hwc2chw(top_shape[1], top_shape[3], top_shape[2], tmp.data(), prefetch_data + offset);
       packing = NCHW;
-#endif
+//#endif
       prefetch_label[item_id] = lines_[id_][line_id].second;
     }
     if (cache_on && !cached_[id_] && !from_cache) {
