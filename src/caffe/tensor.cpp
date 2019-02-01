@@ -7,18 +7,18 @@ namespace caffe {
 
 Tensor::Tensor(Type dtype)
     : type_(dtype),
-      synced_arrays_(make_shared<vector<shared_ptr<SyncedMemory>>>(Type_ARRAYSIZE)),
+      synced_arrays_(Type_ARRAYSIZE),
       count_(0) {}
 
 const shared_ptr<SyncedMemory>& Tensor::synced_mem() const {
-  const shared_ptr<SyncedMemory>& mem = synced_arrays_->at(type_);
+  const shared_ptr<SyncedMemory>& mem = synced_arrays_[type_];
   CHECK(mem);
   CHECK(mem->is_valid());
   return mem;
 }
 
 shared_ptr<SyncedMemory>& Tensor::mutable_synced_mem(bool flush) {
-  shared_ptr<SyncedMemory>& mem = synced_arrays_->at(type_);
+  shared_ptr<SyncedMemory>& mem = synced_arrays_[type_];
   // We are about to assign something here, thus validate in advance:
   if (mem) {
     mem->validate();
@@ -30,10 +30,10 @@ shared_ptr<SyncedMemory>& Tensor::mutable_synced_mem(bool flush) {
 }
 
 void Tensor::invalidate_others() {
-  CHECK(synced_arrays_->at(type_)->is_valid()) << "No valid arrays left";
-  for (size_t i = 0; i < synced_arrays_->size(); ++i) {
+  CHECK(synced_arrays_[type_]->is_valid()) << "No valid arrays left";
+  for (size_t i = 0; i < synced_arrays_.size(); ++i) {
     if (i != type_) {
-      shared_ptr<SyncedMemory>& mem = synced_arrays_->at(i);
+      shared_ptr<SyncedMemory>& mem = synced_arrays_[i];
       if (mem) {
         mem->invalidate();
       }
@@ -55,7 +55,7 @@ void Tensor::convert(Type new_type) {
   }
 
   const shared_ptr<SyncedMemory>& current_mem = synced_mem();
-  shared_ptr<SyncedMemory>& new_mem = synced_arrays_->at(new_type);
+  shared_ptr<SyncedMemory>& new_mem = synced_arrays_[new_type];
 
   if (!new_mem || !new_mem->is_valid()) {
     const std::size_t new_cap = even(count_) * tsize(new_type);
@@ -284,9 +284,9 @@ void Tensor::gpu_scal(int count, Type dtype, void* data, float scal, cublasHandl
 
 size_t Tensor::gpu_memory_use(bool own_only) const {
   size_t ret = 0ULL;
-  for (size_t i = 0; i < synced_arrays_->size(); ++i) {
-    if (synced_arrays_->at(i)) {
-      ret += synced_arrays_->at(i)->gpu_memory_use(own_only);
+  for (size_t i = 0; i < synced_arrays_.size(); ++i) {
+    if (synced_arrays_[i]) {
+      ret += synced_arrays_[i]->gpu_memory_use(own_only);
     }
   }
   return ret;
@@ -297,20 +297,20 @@ std::string Tensor::to_string(int indent) const {  // debug helper
   std::ostringstream os;
   os << idt << "Tensor " << this << ", count_: " << count_ << ", type: " << Type_Name(type_)
      << std::endl;
-  os << idt << "synced_arrays_: " << synced_arrays_.get();
-  for (size_t i = 0; i < synced_arrays_->size(); ++i) {
-    os << " " << synced_arrays_->at(i).get();
+  os << idt << "synced_arrays_: ";
+  for (size_t i = 0; i < synced_arrays_.size(); ++i) {
+    os << " " << synced_arrays_[i].get();
   }
   os << std::endl;
 
-  for (size_t i = 0; i < synced_arrays_->size(); ++i) {
-    if (synced_arrays_->at(i)) {
+  for (size_t i = 0; i < synced_arrays_.size(); ++i) {
+    if (synced_arrays_[i]) {
       os << idt << Type_Name((Type) i);
       if (type_ == i) {
         os << " ***Current***";
       }
       os << std::endl << idt << " data:" << std::endl;
-      os << synced_arrays_->at(i)->to_string(indent + 2, (Type) i);
+      os << synced_arrays_[i]->to_string(indent + 2, (Type) i);
 
 //      if (synced_arrays_->at(i)->is_valid()) {
 //        os << idt << "ASUM: " << asum(0) << std::endl;

@@ -42,10 +42,6 @@ class CuDNNConvolutionLayer : public ConvolutionLayer<Ftype, Btype> {
   static constexpr int REQUEST_ALGO_COUNT = 1;
   static constexpr int ATTEMPTS_TO_RESERVE_WS = 3;
 
-  static std::atomic<size_t> train_mem_req_all_grps_;
-  static std::atomic<size_t> test_mem_req_all_grps_;
-  static std::atomic<size_t> train_tmp_weights_mem_;
-
  public:
   explicit CuDNNConvolutionLayer(const LayerParameter& param)
       : ConvolutionLayer<Ftype, Btype>(param), handles_setup_(false),
@@ -158,13 +154,6 @@ template<typename Ftype, typename Btype>
 constexpr int CuDNNConvolutionLayer<Ftype, Btype>::REQUEST_ALGO_COUNT;
 template<typename Ftype, typename Btype>
 constexpr int CuDNNConvolutionLayer<Ftype, Btype>::ATTEMPTS_TO_RESERVE_WS;
-
-template<typename Ftype, typename Btype>
-std::atomic<size_t> CuDNNConvolutionLayer<Ftype, Btype>::train_mem_req_all_grps_;
-template<typename Ftype, typename Btype>
-std::atomic<size_t> CuDNNConvolutionLayer<Ftype, Btype>::test_mem_req_all_grps_;
-template<typename Ftype, typename Btype>
-std::atomic<size_t> CuDNNConvolutionLayer<Ftype, Btype>::train_tmp_weights_mem_;
 
 #endif
 

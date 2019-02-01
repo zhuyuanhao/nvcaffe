@@ -19,6 +19,7 @@ namespace caffe {
 int P2PManager::global_rank_  = 0;
 int P2PManager::global_count_ = 1;
 char P2PManager::host_name_[_POSIX_HOST_NAME_MAX + 1];
+unique_ptr<boost::barrier> P2PManager::bar_[3];
 
 void P2PManager::Init(int *argc, char ***argv) {
 #ifdef USE_MPI
@@ -56,8 +57,10 @@ P2PManager::P2PManager(shared_ptr<Solver> root_solver,
     int nranks, int devices, const SolverParameter& solver_param) :
       nranks_(nranks),
       syncs_(devices),
-      root_solver_(root_solver),
-      bar_(devices) {
+      root_solver_(root_solver) {
+  bar_[0].reset(new boost::barrier(devices));
+  bar_[1].reset(new boost::barrier(devices));
+  bar_[2].reset(new boost::barrier(devices));
 #ifndef USE_NCCL
   LOG(FATAL) << "USE_NCCL must be specified for multi-GPU mode";
 #else
@@ -145,10 +148,11 @@ void P2PManager::Run(const vector<int>& gpus) {
 #endif
 }
 
-void P2PManager::EarlyCancel(P2PSync* killed) {
+void P2PManager::cancel_all(P2PSync* killed) {
+  DLOG(INFO) << " cancel_all " << killed << ", thread " << lwp_id();
   for (int i = 0; i < syncs_.size(); ++i) {
     syncs_[i]->solver_->request_early_exit();
-    syncs_[i]->StopInternalThread(false);
+    syncs_[i]->solver_->stop_reducing();
   }
 }
 
@@ -178,11 +182,14 @@ P2PSync::~P2PSync() {
 void P2PSync::InternalThreadEntry() {
   CHECK_EQ(nranks_, Caffe::solver_count());
   CHECK_EQ(target_device_, Caffe::current_device());
-  if (rank_ % (nranks_ / P2PManager::global_count()) == 0) {
+  const bool root = rank_ % (nranks_ / P2PManager::global_count()) == 0;
+  if (root) {
     Caffe::set_root_solver(true);
-    solver_ = root_solver_;
+    solver_.swap(root_solver_);
     solver_->root_add_callback(this);
-  } else {
+  }
+  soft_barrier(0);
+  if (!root) {
     Caffe::set_root_solver(false);
     solver_.reset(caffe::SolverRegistry::CreateSolver(solver_param_, root_solver_.get(), rank_));
   }
@@ -207,12 +214,12 @@ void P2PSync::InternalThreadEntry() {
                               rank_));
   NCCL_CHECK(ncclGroupEnd());
 #else
-  soft_barrier();
+  soft_barrier(0);
   NCCL_CHECK(ncclCommInitRank(&nccl_comm_,
                               nranks_,
                               mgr_->nccl_id(),
                               rank_));
-  soft_barrier();
+  soft_barrier(0);
 #endif
 #endif
 
@@ -230,14 +237,19 @@ void P2PSync::InternalThreadEntry() {
     Caffe::set_random_seed(Caffe::SEED_NOT_SET);
   }
 
-  if (solver_->Solve()) {
-    mgr_->EarlyCancel(this);
-  }
+  solver_->Solve();
+
+  soft_barrier(2);
+  DLOG(INFO) << " Leaving P2PSync thread " << lwp_id();
 }
 
-void P2PSync::soft_barrier() {
+void P2PSync::soft_barrier(int b) {
   // CPU barrier to avoid busy-polling on the GPU.
-  mgr_->bar_wait();
+  mgr_->bar_wait(b);
+}
+
+void P2PSync::cancel_all() {
+  mgr_->cancel_all(this);
 }
 
 void P2PSync::on_start(const vector<shared_ptr<Blob>>& net) {

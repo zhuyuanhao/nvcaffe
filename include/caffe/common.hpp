@@ -238,7 +238,7 @@ using boost::unique_lock;
 using boost::upgrade_to_unique_lock;
 
 std::uint32_t lwp_id();
-std::uint64_t lwp_dev_id();
+std::uint64_t lwp_dev_id(int dev = -1);
 
 template<typename Dtype>
 void atomic_maximum(std::atomic<Dtype>& max_val, Dtype const& new_val) noexcept {
@@ -278,7 +278,7 @@ class CudaStream {
 
 struct CuBLASHandle {
   CuBLASHandle();
-  explicit CuBLASHandle(cudaStream_t stream);
+  explicit CuBLASHandle(shared_ptr<CudaStream>&& stream);
   ~CuBLASHandle();
 
   cublasHandle_t get() const {
@@ -286,12 +286,13 @@ struct CuBLASHandle {
   }
  private:
   cublasHandle_t handle_;
+  shared_ptr<CudaStream> stream_;
   DISABLE_COPY_MOVE_AND_ASSIGN(CuBLASHandle);
 };
 
 #ifdef USE_CUDNN
 struct CuDNNHandle {
-  explicit CuDNNHandle(cudaStream_t stream);
+  explicit CuDNNHandle(shared_ptr<CudaStream>&& stream);
   ~CuDNNHandle();
 
   cudnnHandle_t get() const {
@@ -299,6 +300,7 @@ struct CuDNNHandle {
   }
  private:
   cudnnHandle_t handle_;
+  shared_ptr<CudaStream> stream_;
   DISABLE_COPY_MOVE_AND_ASSIGN(CuDNNHandle);
 };
 #endif
@@ -317,7 +319,6 @@ class Caffe {
   // including boost/thread.hpp to avoid a boost/NVCC issues (#1009, #1010)
   // on OSX. Also fails on Linux with CUDA 7.0.18.
   static Caffe& Get();
-  static void Delete();
 
   enum Brew { CPU, GPU };
 
@@ -531,7 +532,6 @@ class Caffe {
   static std::atomic<uint64_t> root_seed_;
   static std::mutex cd_mutex_, caffe_mutex_, pstream_mutex_, cublas_mutex_,
       cudnn_mutex_, seed_mutex_;
-  static std::unordered_map<std::uint64_t, std::shared_ptr<Caffe>> thread_instance_map_;
 
   static std::atomic<size_t> epoch_count_;
   shared_ptr<CudaStream> curand_stream_;

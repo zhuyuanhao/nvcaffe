@@ -107,7 +107,8 @@ class Solver {
    public:
     virtual void allreduce(int param_id) = 0;
     virtual void allreduce_bucket(size_t count, void* bucket, Type type) = 0;
-    virtual void soft_barrier() = 0;
+    virtual void soft_barrier(int b) = 0;
+    virtual void cancel_all() = 0;
     virtual void saveTestResults(float loss, const vector<float>& scores) = 0;
     virtual void aggregateTestResults(float* loss, vector<float>* scores) = 0;
     virtual cudaStream_t comm_stream() const = 0;
@@ -142,6 +143,7 @@ class Solver {
     iter_flag_.disarm();
   }
   void stop_reducing() const {
+    net_->Finalize();
     reduce_thread_->interrupt();
   }
   bool stop_reducing_requested() const {
@@ -149,11 +151,9 @@ class Solver {
   }
 
   void CheckSnapshotWritePermissions();
-  void Finalize();
 
   void request_early_exit() {
     requested_early_exit_ = true;
-    stop_reducing();
     iteration_complete_signal();
   }
 
@@ -201,7 +201,7 @@ class Solver {
 
   void callback_soft_barrier() {
     if (callback_ != nullptr) {
-      callback_->soft_barrier();
+      callback_->soft_barrier(0);
     }
   }
 

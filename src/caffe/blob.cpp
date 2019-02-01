@@ -263,7 +263,7 @@ void Blob::CopyFrom(const Blob& source, bool copy_diff, bool reshape,
   Type dst_type = copy_diff ? diff_type() : data_type();
   const bool is_gpu = Caffe::mode() == Caffe::GPU;
 #if defined(USE_CUDNN)
-  if ((src_packing == dst_packing /*&& src_type == dst_type*/)
+  if ((src_packing == dst_packing && src_type == dst_type)
       || !is_gpu || shape().size() != 4 || source.shape().size() != 4) {
 #else
   CHECK_EQ(src_packing, dst_packing);

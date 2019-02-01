@@ -20,6 +20,22 @@ namespace caffe {
     (CUDNN_CONVOLUTION_BWD_FILTER_ALGO_WINOGRAD_NONFUSED + 1)
 #endif
 
+static std::mutex conv_mutex_;
+static constexpr size_t MAX_SIZET = static_cast<size_t>(-1UL);
+
+size_t mem_req(int use_case, int dev, size_t maxval = MAX_SIZET) {
+  std::lock_guard<std::mutex> lock(conv_mutex_);
+  static std::map<std::uint64_t, size_t> m[3];
+  std::uint64_t key = static_cast<std::uint64_t>(dev); //lwp_dev_id(dev);
+  auto it = m[use_case].find(key);
+  if (it == m[use_case].end()) {
+    it = m[use_case].emplace(key, maxval == MAX_SIZET ? 0UL : maxval).first;
+  } else if (maxval != MAX_SIZET && maxval > it->second) {
+    it->second = maxval;
+  }
+  return it->second;
+}
+
 void setConvolutionDescMath(Type math, cudnnConvolutionDescriptor_t conv) {
   int padA[2];
   int strideA[2];
@@ -71,6 +87,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::LayerSetUp(
   bwd_filter_cudnn_math_.resize(bottom.size());
   bwd_data_cudnn_math_.resize(bottom.size());
 #endif
+  const int dev = Caffe::current_device();
 
   // initialize size arrays
   workspace_fwd_sizes_.resize(bottom.size());
@@ -158,8 +175,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::LayerSetUp(
   }
 
   if (this->phase_ == TRAIN) {
-    atomic_maximum(train_tmp_weights_mem_,
-                   align_up<8>(this->weight_offset_ * tsize(tpmax<Btype, float>())));
+    mem_req(2, dev, align_up<8>(this->weight_offset_ * tsize(tpmax<Btype, float>())));
   }
 
   // Create tensor descriptor(s) for data and corresponding convolution(s).
@@ -240,7 +256,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::AllocateFindExWorkspace() {
   GPUMemory::GetInfo(&bytes_available, &bytes_total, true);
   bytes_available = std::min(bytes_available + ws->size(), bytes_total / 2UL);
 
-  const size_t tmp_weights_size = train_tmp_weights_mem_.load();
+  const size_t tmp_weights_size = mem_req(2, dev);
   if (bytes_available > tmp_weights_size) {
     bytes_available -= tmp_weights_size;
   } else {
@@ -282,20 +298,15 @@ size_t CuDNNConvolutionLayer<Ftype, Btype>::AllocateWorkspace(size_t bottom_size
 
   for (int i = 0; i < bottom_size; ++i) {
     if (this->phase_ == TRAIN) {
-      atomic_maximum(train_mem_req_all_grps_,
-                     align_up<8>(workspace_bwd_data_sizes_[i]) * ws_groups());
-      atomic_maximum(train_mem_req_all_grps_,
-                     align_up<8>(workspace_bwd_filter_sizes_[i]) * ws_groups());
-      atomic_maximum(train_mem_req_all_grps_,
-                     align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
+      mem_req(0, dev, align_up<8>(workspace_bwd_data_sizes_[i]) * ws_groups());
+      mem_req(0, dev, align_up<8>(workspace_bwd_filter_sizes_[i]) * ws_groups());
+      mem_req(0, dev, align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
     } else {
-      atomic_maximum(test_mem_req_all_grps_,
-                     align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
+      mem_req(1, dev, align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
     }
   }
   shared_ptr<GPUMemory::Workspace>& ws = GPUMemory::workspace_[dev];
-  ws->safe_reserve(this->phase_ == TRAIN ?
-      train_mem_req_all_grps_.load() : test_mem_req_all_grps_.load());
+  ws->safe_reserve(this->phase_ == TRAIN ? mem_req(0, dev) : mem_req(1, dev));
   return ws->size();
 }
 
@@ -590,11 +601,9 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
 #endif
             workspace_fwd_sizes_[i] = fwd_results[k].memory;
             if (this->phase_ == TRAIN) {
-              atomic_maximum(train_mem_req_all_grps_,
-                             align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
+              mem_req(0, dev, align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
             } else {
-              atomic_maximum(test_mem_req_all_grps_,
-                             align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
+              mem_req(1, dev, align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
             }
             fwd_pseudo = is_precise(forward_math_) && !is_precise(tp<Ftype>());
             break;
@@ -621,7 +630,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
       }
 #endif
       if (user_algos_override_[2] < 0) {
-        const size_t tmp_weights_size = train_tmp_weights_mem_.load();
+        const size_t tmp_weights_size = mem_req(2, dev);
         shared_ptr<GPUMemory::Workspace>& tmp_ws = GPUMemory::weights_workspace_[dev];
         tmp_ws->safe_reserve(tmp_weights_size);
         float algo_time = 0.F;
@@ -690,8 +699,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
               }
 #endif
               workspace_bwd_filter_sizes_[i] = bwd_filter_results[k].memory;
-              atomic_maximum(train_mem_req_all_grps_,
-                             align_up<8>(workspace_bwd_filter_sizes_[i]) * ws_groups());
+              mem_req(0, dev, align_up<8>(workspace_bwd_filter_sizes_[i]) * ws_groups());
               bwd_filter_pseudo = is_precise(backward_filter_math_) && !is_precise(tp<Btype>());
               bftime = bwd_filter_results[k].time;
               break;
@@ -783,8 +791,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
                 }
 #endif
                 workspace_bwd_data_sizes_[i] = bwd_data_results[k].memory;
-                atomic_maximum(train_mem_req_all_grps_,
-                               align_up<8>(workspace_bwd_data_sizes_[i]) * ws_groups());
+                mem_req(0, dev, align_up<8>(workspace_bwd_data_sizes_[i]) * ws_groups());
                 bwd_data_pseudo = is_precise(backward_data_math_) && !is_precise(tp<Btype>());
                 bdtime = bwd_data_results[k].time;
                 break;
@@ -839,7 +846,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
 
     os << "\t(avail " << mem_fmt(available_memory) << ", req "
         << mem_fmt(this->phase_ == TRAIN ?
-            train_mem_req_all_grps_.load() : test_mem_req_all_grps_.load())
+                   mem_req(0, dev) : mem_req(1, dev))
         << ")\tt: " << f_round2(ftime);
 
     if (this->phase_ == TRAIN) {

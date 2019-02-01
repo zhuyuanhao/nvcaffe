@@ -814,11 +814,6 @@ void Net::ReduceAndUpdate() {
   float rate = -1.F;
   while (!solver_->stop_reducing_requested()) {
     const int param_id = reduction_queue_.pop();
-    SolverAction::Enum request = solver_->GetRequestedAction();
-    if (SolverAction::STOP == request) {
-      solver_->request_early_exit();
-      break;
-    }
     if (param_id == END_OF_TRAIN) {
       break;
     }
@@ -846,9 +841,6 @@ void Net::ReduceAndUpdate() {
       if (Caffe::solver_count() > 1) {
         if (!use_buckets && !clip_grads) {
           Reduce(param_id);
-          if (solver_->stop_reducing_requested()) {
-            break;
-          }
           solver_->ApplyUpdate(param_id, handle, rate, true, clear_grads);
           continue;
         }
@@ -890,9 +882,6 @@ void Net::ReduceAndUpdate() {
           CHECK_EQ((int) learnable_params_[id_from]->diff_type(), learnable_types_[type_id]);
           ReduceBucket(received_count, learnable_params_[id_from]->diff_type(),
               learnable_params_ptrs_[type_id][id_from]);
-          if (solver_->stop_reducing_requested()) {
-            break;
-          }
           if (clip_grads) {
             solver_->ClipGradientsAndNormalize(handle, type_id, au_ids[type_id]);
           }
@@ -910,9 +899,6 @@ void Net::ReduceAndUpdate() {
         }
         continue;  // to process leftovers for other type
       }
-      break;
-    }
-    if (solver_->stop_reducing_requested()) {
       break;
     }
     if (param_id == END_OF_ITERATION) {

@@ -51,7 +51,7 @@ class Tensor {
   shared_ptr<SyncedMemory>& mutable_synced_mem(bool flush = true);
 
   bool is_current_valid() const {
-    const shared_ptr<SyncedMemory>& mem = synced_arrays_->at(type_);
+    const shared_ptr<SyncedMemory>& mem = synced_arrays_[type_];
     return mem && mem->is_valid();
   }
 
@@ -66,17 +66,17 @@ class Tensor {
   }
 
   bool is_empty() const {
-    const shared_ptr<SyncedMemory>& mem = synced_arrays_->at(type_);
+    const shared_ptr<SyncedMemory>& mem = synced_arrays_[type_];
     return !mem || mem->head() == SyncedMemory::UNINITIALIZED;
   }
 
   bool is_gpu_head() const {
-    const shared_ptr<SyncedMemory>& mem = synced_arrays_->at(type_);
+    const shared_ptr<SyncedMemory>& mem = synced_arrays_[type_];
     return mem && (mem->head() == SyncedMemory::SYNCED || mem->head() == SyncedMemory::HEAD_AT_GPU);
   }
 
   bool is_cpu_head() const {
-    const shared_ptr<SyncedMemory>& mem = synced_arrays_->at(type_);
+    const shared_ptr<SyncedMemory>& mem = synced_arrays_[type_];
     return mem && (mem->head() == SyncedMemory::SYNCED || mem->head() == SyncedMemory::HEAD_AT_CPU);
   }
 
@@ -85,7 +85,7 @@ class Tensor {
   // numerical type stored here at a moment (might change due to conversion)
   Type type_;
   // array of projections to different types (including current type_)
-  shared_ptr<vector<shared_ptr<SyncedMemory>>> synced_arrays_;
+  vector<shared_ptr<SyncedMemory>> synced_arrays_;
   // number of entries - comes from Blob via Reshape
   int count_;
 

@@ -32,8 +32,6 @@ std::mutex Caffe::pstream_mutex_;
 std::mutex Caffe::cublas_mutex_;
 std::mutex Caffe::cudnn_mutex_;
 std::mutex Caffe::seed_mutex_;
-std::unordered_map<std::uint64_t, std::shared_ptr<Caffe>> Caffe::thread_instance_map_;
-
 
 std::uint32_t lwp_id() {
 #if defined(APPLE)
@@ -43,40 +41,24 @@ std::uint32_t lwp_id() {
 #endif
 }
 
-std::uint64_t lwp_dev_id() {
-  std::uint64_t dev = static_cast<std::uint64_t>(Caffe::current_device());
-  return lwp_id() + (dev << 32);
+std::uint64_t lwp_dev_id(int dev) {
+  std::uint64_t dev64 = static_cast<std::uint64_t>(dev < 0 ? Caffe::current_device() : dev);
+  return lwp_id() + (dev64 << 32LL);
 }
 
 Caffe& Caffe::Get() {
   // Make sure each thread can have different values.
   // We also need to care about device id.
-  std::uint64_t utid = lwp_dev_id();
   std::lock_guard<std::mutex> lock(caffe_mutex_);
-  auto it = thread_instance_map_.find(utid);
-  if (it != thread_instance_map_.end()) {
-    return *it->second.get();
-  }
-  auto emp_pair = thread_instance_map_.emplace(utid, std::shared_ptr<Caffe>(new Caffe()));
-  ++thread_count_;
-  DLOG(INFO) << "[" << current_device()
-             << "] New Caffe instance " << emp_pair.first->second.get()
-             << ", count " << thread_count_ << ", thread " << lwp_id() << ", tid " << utid;
-  return *emp_pair.first->second.get();
-}
-
-void Caffe::Delete() {
-  std::uint64_t utid = lwp_dev_id();
-  std::lock_guard<std::mutex> lock(caffe_mutex_);
-  auto it = thread_instance_map_.find(utid);
-  if (it != thread_instance_map_.end()) {
-    --thread_count_;
+  static thread_local unique_ptr<Caffe> caffe;
+  if (!caffe) {
+    caffe.reset(new Caffe());
+    ++thread_count_;
     DLOG(INFO) << "[" << current_device()
-               << "] Caffe instance " << it->second.get()
-               << " deleted, count " << thread_count_ << ", thread "
-               << lwp_id() << ", tid " << utid;
-    thread_instance_map_.erase(it);
+               << "] New Caffe instance " << caffe.get()
+               << ", count " << thread_count_ << ", thread " << lwp_id();
   }
+  return *caffe;
 }
 
 // random seeding
@@ -107,13 +89,13 @@ void Caffe::set_root_seed(uint64_t random_seed) {
 }
 
 void Caffe::set_random_seed_int(uint64_t random_seed) {
+  std::lock_guard<std::mutex> lock(seed_mutex_);
   if (root_seed_.load() == Caffe::SEED_NOT_SET) {
     root_seed_.store(random_seed);
   } else if (random_seed == Caffe::SEED_NOT_SET) {
     return;  // i.e. root solver was previously set to 0+ and there is no need to re-generate
   }
   // Curand seed
-  std::lock_guard<std::mutex> lock(seed_mutex_);
   if (random_seed == Caffe::SEED_NOT_SET) {
     random_seed = cluster_seedgen();
   }
@@ -167,12 +149,18 @@ void Caffe::init() {
 }
 
 Caffe::~Caffe() {
+  std::lock_guard<std::mutex> lock(caffe_mutex_);
   int current_device;  // Just to check CUDA status:
   cudaError_t status = cudaGetDevice(&current_device);
   // Preventing crash while Caffe shutting down.
   if (status != cudaErrorCudartUnloading && curand_generator_ != nullptr) {
     CURAND_CHECK(curandDestroyGenerator(curand_generator_));
   }
+  --thread_count_;
+  DLOG(INFO) << "[" << current_device
+             << "] Caffe instance " << this
+             << " deleted, count " << thread_count_ << ", thread "
+             << lwp_id();
 }
 
 size_t Caffe::min_avail_device_memory() {
@@ -220,10 +208,10 @@ CudaStream::~CudaStream() {
 
 shared_ptr<CudaStream> Caffe::pstream(int group) {
   CHECK_GE(group, 0);
+  std::lock_guard<std::mutex> lock(pstream_mutex_);
   if (group < streams_.size() && streams_[group]) {
     return streams_[group];
   }
-  std::lock_guard<std::mutex> lock(pstream_mutex_);
   if (group >= streams_.size()) {
     streams_.resize(group + 1UL);
   }
@@ -235,15 +223,15 @@ shared_ptr<CudaStream> Caffe::pstream(int group) {
 
 shared_ptr<CuBLASHandle> Caffe::th_cublas_handle(int group) {
   CHECK_GE(group, 0);
+  std::lock_guard<std::mutex> lock(cublas_mutex_);
   if (group < cublas_handles_.size() && cublas_handles_[group]) {
     return cublas_handles_[group];
   }
-  std::lock_guard<std::mutex> lock(cublas_mutex_);
   if (group >= cublas_handles_.size()) {
     cublas_handles_.resize(group + 1UL);
   }
   if (!cublas_handles_[group]) {
-    cublas_handles_[group] = make_shared<CuBLASHandle>(pstream(group)->get());
+    cublas_handles_[group] = make_shared<CuBLASHandle>(pstream(group));
   }
   return cublas_handles_[group];
 }
@@ -251,15 +239,15 @@ shared_ptr<CuBLASHandle> Caffe::th_cublas_handle(int group) {
 #ifdef USE_CUDNN
 cudnnHandle_t Caffe::th_cudnn_handle(int group) {
   CHECK_GE(group, 0);
+  std::lock_guard<std::mutex> lock(cudnn_mutex_);
   if (group < cudnn_handles_.size() && cudnn_handles_[group]) {
     return cudnn_handles_[group]->get();
   }
-  std::lock_guard<std::mutex> lock(cudnn_mutex_);
   if (group >= cudnn_handles_.size()) {
     cudnn_handles_.resize(group + 1UL);
   }
   if (!cudnn_handles_[group]) {
-    cudnn_handles_[group] = make_shared<CuDNNHandle>(pstream(group)->get());
+    cudnn_handles_[group] = make_shared<CuDNNHandle>(pstream(group));
   }
   return cudnn_handles_[group]->get();
 }
@@ -438,20 +426,24 @@ const float16 TypedConsts<float16>::one = 1.0f;
 const int     TypedConsts<int>::zero = 0;
 const int     TypedConsts<int>::one = 1;
 
-CuBLASHandle::CuBLASHandle() : handle_(nullptr) {
+CuBLASHandle::CuBLASHandle()
+  : handle_(nullptr), stream_(Caffe::thread_pstream()) {
   CUBLAS_CHECK(cublasCreate(&handle_));
+  CUBLAS_CHECK(cublasSetStream(handle_, stream_->get()));
 }
-CuBLASHandle::CuBLASHandle(cudaStream_t stream) : handle_(nullptr) {
+CuBLASHandle::CuBLASHandle(shared_ptr<CudaStream>&& stream)
+    : handle_(nullptr), stream_(std::move(stream)) {
   CUBLAS_CHECK(cublasCreate(&handle_));
-  CUBLAS_CHECK(cublasSetStream(handle_, stream));
+  CUBLAS_CHECK(cublasSetStream(handle_, stream_->get()));
 }
 CuBLASHandle::~CuBLASHandle() {
   CUBLAS_CHECK(cublasDestroy(handle_));
 }
 #ifdef USE_CUDNN
-CuDNNHandle::CuDNNHandle(cudaStream_t stream) : handle_(nullptr) {
+CuDNNHandle::CuDNNHandle(shared_ptr<CudaStream>&& stream)
+  : handle_(nullptr), stream_(std::move(stream)) {
   CUDNN_CHECK(cudnnCreate(&handle_));
-  CUDNN_CHECK(cudnnSetStream(handle_, stream));
+  CUDNN_CHECK(cudnnSetStream(handle_, stream_->get()));
 }
 CuDNNHandle::~CuDNNHandle() {
   CUDNN_CHECK(cudnnDestroy(handle_));

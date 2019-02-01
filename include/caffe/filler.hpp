@@ -115,8 +115,8 @@ class GaussianFiller : public Filler<Dtype> {
       CHECK_GE(blob->num_axes(), 1);
       const int num_outputs = blob->shape(0);
       Dtype non_zero_probability = Dtype(sparse) / Dtype(num_outputs);
-      rand_vec_.reset(new SyncedMemory(even(blob->count()) * sizeof(int)));
-      int* mask = reinterpret_cast<int*>(rand_vec_->mutable_cpu_data());
+      rand_vec_.resize(even(blob->count()));
+      int* mask = rand_vec_.data();
       caffe_rng_bernoulli(blob->count(), non_zero_probability, mask);
       for (int i = 0; i < blob->count(); ++i) {
         data[i] *= mask[i];
@@ -125,7 +125,7 @@ class GaussianFiller : public Filler<Dtype> {
   }
 
  protected:
-  shared_ptr<SyncedMemory> rand_vec_;
+  std::vector<int> rand_vec_;
 };
 
 

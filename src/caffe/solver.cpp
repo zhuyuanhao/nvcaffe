@@ -381,37 +381,34 @@ void Solver::Step(int iters) {
       SnapshotWithScores(scores);
     }
     if (SolverAction::STOP == request) {
-      requested_early_exit_ = true;
+      callback_->cancel_all();
       total_lapse_ += iteration_timer_->Seconds();
       // Break out of training loop.
       break;
     }
     net_->update_grad_scale();
   }
-  Finalize();
-}
-
-void Solver::Finalize() {
-  net_->Finalize();
-  if (reduce_thread_) {
+  if (!stop_reducing_requested()) {
+    stop_reducing();
+  }
+  if (reduce_thread_->joinable()) {
     reduce_thread_->join();
   }
 }
 
 void Solver::Reduce(Callback* callback, int device, Caffe::Brew mode, uint64_t random_seed,
     bool root_solver) {
-  set_callback(callback);
-  if (mode == Caffe::GPU) {
-    CUDA_CHECK(cudaSetDevice(device));
+    set_callback(callback);
+    if (mode == Caffe::GPU) {
+      CUDA_CHECK(cudaSetDevice(device));
 #ifndef NO_NVML
-    nvml::setCpuAffinity(device);
+      nvml::setCpuAffinity(device);
 #endif
-  }
-  Caffe::set_mode(mode);
-  Caffe::set_random_seed(random_seed);
-  Caffe::set_root_solver(root_solver);
-  net_->ReduceAndUpdate();
-  Caffe::Delete();
+    }
+    Caffe::set_mode(mode);
+    Caffe::set_random_seed(random_seed);
+    Caffe::set_root_solver(root_solver);
+    net_->ReduceAndUpdate();
 }
 
 bool Solver::Solve(const char* resume_file) {
@@ -524,7 +521,7 @@ vector<float> Solver::Test(const int test_net_id, const int iters, bool use_mult
     }
     if (requested_early_exit_) {
       LOG(INFO) << "Test interrupted.";
-      Finalize();
+      callback_->cancel_all();
       return scores;
     }
 
