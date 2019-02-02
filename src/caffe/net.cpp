@@ -848,15 +848,18 @@ void Net::ReduceAndUpdate() {
         if (!clip_grads) {
           this->learnable_params()[param_id]->scale_diff(1.F / global_grad_scale(), handle);
           solver_->ApplyUpdate(param_id, handle, rate, true, clear_grads);
+          continue;
         }
-        continue;
       }
     } else if (clip_grads && Caffe::solver_count() == 1) {
-      solver_->ClipGradientsAndNormalize(handle, type_id, au_ids[type_id]);
-      for (int i : au_ids[type_id]) {
-        solver_->ApplyUpdate(i, handle, rate, false, clear_grads);
-      }
-      au_ids[type_id].clear();
+      do {
+        solver_->ClipGradientsAndNormalize(handle, type_id, au_ids[type_id]);
+        for (int i : au_ids[type_id]) {
+          solver_->ApplyUpdate(i, handle, rate, false, clear_grads);
+        }
+        au_ids[type_id].clear();
+        type_id = type_id == 0 ? 1 : 0;
+      } while (!au_ids[type_id].empty());  // to process leftovers for other type
     }
 
     bool pass0 = true;
