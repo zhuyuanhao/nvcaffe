@@ -25,8 +25,8 @@ void EltwiseLayer<Ftype, Btype>::LayerSetUp(const vector<Blob*>& bottom,
     }
   }
   stable_prod_grad_ = this->layer_param_.eltwise_param().stable_prod_grad();
-  bshared_ = !Blob::IsSharedDataCycled(bottom);
-  tshared_ = !Blob::IsSharedDiffCycled(top);
+  bshared_ = false;//!Blob::IsSharedDataCycled(top[0]);
+  tshared_ = false;//!Blob::IsSharedDiffCycled(bottom);
 }
 
 template <typename Ftype, typename Btype>

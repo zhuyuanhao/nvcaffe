@@ -968,15 +968,15 @@ void Net::ReduceBucket(size_t count, Type bucket_type, void* bucket) {
 }
 
 void Net::ForwardDebugInfo(const int layer_id) {
-  LOG_IF(INFO, Caffe::root_solver())
-      << "[Forward] Layer " << layer_names_[layer_id];
+//  if (phase() == TEST) return;
   for (int top_id = 0; top_id < top_vecs_[layer_id].size(); ++top_id) {
     const Blob& blob = *top_vecs_[layer_id][top_id];
     const string& blob_name = blob_names_[top_id_vecs_[layer_id][top_id]];
-    const double data_abs_val_mean = blob.asum_data() / blob.count();
+    const float data_abs_val_mean = blob.asum_data() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> top blob " << blob_name
-        << ", count: " << blob.count()
+        << "    [Forward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", top blob " << blob_name
         << " data: " << data_abs_val_mean;
   }
   for (int param_id = 0; param_id < layers_[layer_id]->blobs().size();
@@ -986,15 +986,15 @@ void Net::ForwardDebugInfo(const int layer_id) {
     const string& blob_name = param_display_names_[net_param_id];
     const double data_abs_val_mean = blob.asum_data() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> param blob " << blob_name
-        << ", count: " << blob.count()
+        << "    [Forward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", param blob " << blob_name
         << " data: " << data_abs_val_mean;
   }
 }
 
 void Net::BackwardDebugInfo(const int layer_id) {
-  LOG_IF(INFO, Caffe::root_solver())
-      << "[Backward] Layer " << layer_names_[layer_id];
+//  if (phase() == TEST) return;
   const vector<Blob*>& bottom_vec = bottom_vecs_[layer_id];
   for (int bottom_id = 0; bottom_id < bottom_vec.size(); ++bottom_id) {
     if (!bottom_need_backward_[layer_id][bottom_id]) { continue; }
@@ -1002,9 +1002,10 @@ void Net::BackwardDebugInfo(const int layer_id) {
     const string& blob_name = blob_names_[bottom_id_vecs_[layer_id][bottom_id]];
     const double diff_abs_val_mean = blob.asum_diff() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> bottom blob " << blob_name
-        << ", count: " << blob.count()
-        << ", diff: " << diff_abs_val_mean;
+        << "    [Backward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", bottom blob " << blob_name
+        << " diff: " << diff_abs_val_mean; // << " amax: " << blob.amax_diff();
   }
   for (int param_id = 0; param_id < layers_[layer_id]->blobs().size();
        ++param_id) {
@@ -1012,9 +1013,10 @@ void Net::BackwardDebugInfo(const int layer_id) {
     const Blob& blob = *layers_[layer_id]->blobs()[param_id];
     double diff_abs_val_mean = blob.asum_diff() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> param blob " << param_id
-        << ", count: " << blob.count()
-        << ", diff: " << diff_abs_val_mean;
+        << "    [Backward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", param blob " << param_id
+        << " diff: " << diff_abs_val_mean;
   }
 }
 
