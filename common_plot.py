@@ -21,12 +21,15 @@ def get_test_accuracy(log, top_k):
     accuracy = [float(i) for i in accuracy]
     return iteration, accuracy
 
+#I0203 19:20:49.893703 30507 solver.cpp:498] Iteration 28000, Testing net (#0)
 
 def get_test_loss(log):
     iteration = re.findall(r'Iteration (\d*), Testing net ', log)
     loss = re.findall(r'Test net output #\d: loss = (\d*.\d*)', log)
     if len(loss)==0:
         loss = re.findall(r'Test net output #\d: loss/loss = (\d*.\d*)', log)
+    if len(loss)==0:
+        loss = re.findall(r'Test net output #\d: softmax_loss = (\d*.\d*)', log)
     iteration = [int(i) for i in iteration]
     loss = [float(i) for i in loss]
     return iteration, loss
@@ -53,7 +56,8 @@ def get_epochs(log):
 
     batch_size = int(batch_size[0])
    # print max_iter, iter_size, batch_size
-    num_epochs = int(round( (max_iter * iter_size * batch_size*num_gpus) /  1281167. +0.5))
+#    num_epochs = int(round( (max_iter * iter_size * batch_size*num_gpus) /  1281167. +0.5))
+    num_epochs = int(round( (max_iter * iter_size * batch_size*num_gpus) /  464400. +0.5))
     return max_iter, num_epochs
 
 def get_net_name(log):
@@ -214,7 +218,7 @@ def plot_loss(data, value_at_hover=False):
 
     plt.legend(nets, loc='upper right')
     plt.title("Log Loss")
-    plt.xlabel("Iteration")
+    plt.xlabel("Epochs")
     plt.ylabel("Log Loss")
     plt.xlim(0)
     plt.grid()

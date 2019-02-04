@@ -63,6 +63,7 @@ void PReLULayer<Ftype, Btype>::Forward_gpu(const vector<Blob*>& bottom,
   PReLUForward<<<CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS, 0, Caffe::thread_stream()>>>(
       count, channels, dim, bottom_data, top_data, slope_data, div_factor);
   CUDA_POST_KERNEL_CHECK;
+  CUDA_CHECK(cudaStreamSynchronize(Caffe::thread_stream()));
 }
 
 template <typename Ftype, typename Btype>
@@ -96,6 +97,7 @@ void PReLULayer<Ftype, Btype>::Backward_gpu(const vector<Blob*>& top,
       bottom_data ,
       backward_buff_.mutable_gpu_diff());
     CUDA_POST_KERNEL_CHECK;
+    CUDA_CHECK(cudaStreamSynchronize(Caffe::thread_stream()));
     if (channel_shared_) {
       Btype dsum;
       caffe_gpu_dot(channels * dim, backward_buff_.gpu_diff(),
@@ -118,6 +120,7 @@ void PReLULayer<Ftype, Btype>::Backward_gpu(const vector<Blob*>& top,
         count, channels, dim, top_diff, bottom_data, bottom_diff, slope_data,
         div_factor);
     CUDA_POST_KERNEL_CHECK;
+    CUDA_CHECK(cudaStreamSynchronize(Caffe::thread_stream()));
   }
 }
 

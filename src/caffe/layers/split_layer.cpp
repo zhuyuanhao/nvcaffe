@@ -19,11 +19,9 @@ void SplitLayer<Ftype, Btype>::Reshape(const vector<Blob*>& bottom, const vector
     if (top[i]->count() != bottom[0]->count()) {
       top[i]->ReshapeLike(*bottom[0]);
     }
-    CHECK(!Blob::IsSharedDataCycled(bottom));
     top[i]->ShareData(*bottom[0]);
     CHECK_EQ(count_, top[i]->count());
   }
-  CHECK(!Blob::IsSharedDiffCycled(top));
   bottom[0]->ShareDiff(*top[0]);
 }
 

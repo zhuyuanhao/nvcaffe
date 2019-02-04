@@ -36,7 +36,8 @@ Net::Net(const NetParameter& param,
       solver_(nullptr),
       solver_rank_(solver_rank),
       solver_init_flag_(solver_init_flag),
-      inner_net_(inner_net) {
+      inner_net_(inner_net),
+      eltwise_mem_sharing_(false) {
   Init(param);
 }
 
@@ -52,7 +53,8 @@ Net::Net(const string& param_file,
       solver_(nullptr),
       solver_rank_(solver_rank),
       solver_init_flag_(solver_init_flag),
-      inner_net_(inner_net) {
+      inner_net_(inner_net),
+      eltwise_mem_sharing_(false) {
   NetParameter param;
   ReadNetParamsFromTextFileOrDie(param_file, &param);
   // Set phase, stages and level
@@ -420,6 +422,7 @@ void Net::Init(const NetParameter& in_param) {
   }
   debug_info_ = param.debug_info();
   trained_layers_shared_ = false;
+  eltwise_mem_sharing_ = param.eltwise_mem_sharing();
   LOG_IF(INFO, Caffe::root_solver()) << "Network initialization done.";
 }
 
@@ -848,15 +851,18 @@ void Net::ReduceAndUpdate() {
         if (!clip_grads) {
           this->learnable_params()[param_id]->scale_diff(1.F / global_grad_scale(), handle);
           solver_->ApplyUpdate(param_id, handle, rate, true, clear_grads);
+          continue;
         }
-        continue;
       }
     } else if (clip_grads && Caffe::solver_count() == 1) {
-      solver_->ClipGradientsAndNormalize(handle, type_id, au_ids[type_id]);
-      for (int i : au_ids[type_id]) {
-        solver_->ApplyUpdate(i, handle, rate, false, clear_grads);
-      }
-      au_ids[type_id].clear();
+      do {
+        solver_->ClipGradientsAndNormalize(handle, type_id, au_ids[type_id]);
+        for (int i : au_ids[type_id]) {
+          solver_->ApplyUpdate(i, handle, rate, false, clear_grads);
+        }
+        au_ids[type_id].clear();
+        type_id = type_id == 0 ? 1 : 0;
+      } while (!au_ids[type_id].empty());  // to process leftovers for other type
     }
 
     bool pass0 = true;
@@ -965,15 +971,15 @@ void Net::ReduceBucket(size_t count, Type bucket_type, void* bucket) {
 }
 
 void Net::ForwardDebugInfo(const int layer_id) {
-  LOG_IF(INFO, Caffe::root_solver())
-      << "[Forward] Layer " << layer_names_[layer_id];
+//  if (phase() == TEST) return;
   for (int top_id = 0; top_id < top_vecs_[layer_id].size(); ++top_id) {
     const Blob& blob = *top_vecs_[layer_id][top_id];
     const string& blob_name = blob_names_[top_id_vecs_[layer_id][top_id]];
-    const double data_abs_val_mean = blob.asum_data() / blob.count();
+    const float data_abs_val_mean = blob.asum_data() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> top blob " << blob_name
-        << ", count: " << blob.count()
+        << "    [Forward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", top blob " << blob_name
         << " data: " << data_abs_val_mean;
   }
   for (int param_id = 0; param_id < layers_[layer_id]->blobs().size();
@@ -983,15 +989,15 @@ void Net::ForwardDebugInfo(const int layer_id) {
     const string& blob_name = param_display_names_[net_param_id];
     const double data_abs_val_mean = blob.asum_data() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> param blob " << blob_name
-        << ", count: " << blob.count()
+        << "    [Forward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", param blob " << blob_name
         << " data: " << data_abs_val_mean;
   }
 }
 
 void Net::BackwardDebugInfo(const int layer_id) {
-  LOG_IF(INFO, Caffe::root_solver())
-      << "[Backward] Layer " << layer_names_[layer_id];
+//  if (phase() == TEST) return;
   const vector<Blob*>& bottom_vec = bottom_vecs_[layer_id];
   for (int bottom_id = 0; bottom_id < bottom_vec.size(); ++bottom_id) {
     if (!bottom_need_backward_[layer_id][bottom_id]) { continue; }
@@ -999,9 +1005,10 @@ void Net::BackwardDebugInfo(const int layer_id) {
     const string& blob_name = blob_names_[bottom_id_vecs_[layer_id][bottom_id]];
     const double diff_abs_val_mean = blob.asum_diff() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> bottom blob " << blob_name
-        << ", count: " << blob.count()
-        << ", diff: " << diff_abs_val_mean;
+        << "    [Backward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", bottom blob " << blob_name
+        << " diff: " << diff_abs_val_mean; // << " amax: " << blob.amax_diff();
   }
   for (int param_id = 0; param_id < layers_[layer_id]->blobs().size();
        ++param_id) {
@@ -1009,9 +1016,10 @@ void Net::BackwardDebugInfo(const int layer_id) {
     const Blob& blob = *layers_[layer_id]->blobs()[param_id];
     double diff_abs_val_mean = blob.asum_diff() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> param blob " << param_id
-        << ", count: " << blob.count()
-        << ", diff: " << diff_abs_val_mean;
+        << "    [Backward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", param blob " << param_id
+        << " diff: " << diff_abs_val_mean;
   }
 }
 
