@@ -431,7 +431,7 @@ class Blob {
    * This deallocates the SyncedMemory holding this Blob's data_, as
    * shared_ptr calls its destructor when reset with the "=" operator.
    */
-  void ShareData(Blob& other);
+  void ShareData(const Blob& other);
 
   /**
    * @brief Set the diff_ shared_ptr to point to the SyncedMemory holding the
@@ -441,7 +441,7 @@ class Blob {
    * This deallocates the SyncedMemory holding this Blob's diff_, as
    * shared_ptr calls its destructor when reset with the "=" operator.
    */
-  void ShareDiff(Blob& other);
+  void ShareDiff(const Blob& other);
 
   void ToProto(BlobProto* proto, bool store_in_old_format, bool write_diff = false) const;
   void ToProtoBVLC(BlobProto* proto, bool write_diff = false) const;
@@ -542,11 +542,8 @@ class Blob {
     }
   }
 
-  static bool IsSharedDataCycled(const Blob* other);
-  static bool IsSharedDiffCycled(const Blob* other);
   static bool IsSharedDataCycled(const vector<Blob*>& others);
   static bool IsSharedDiffCycled(const vector<Blob*>& others);
-  static bool IsSharedCycled(const vector<Blob*>& others);
 
   DISABLE_COPY_MOVE_AND_ASSIGN(Blob);
 
@@ -559,10 +556,6 @@ class Blob {
 
   const Blob* data_shared_with_;
   const Blob* diff_shared_with_;
-  std::unordered_set<const Blob*> data_shared_by_;
-  std::unordered_set<const Blob*> diff_shared_by_;
-  static bool by(bool dt, int level, std::unordered_set<const Blob*>& node_set,
-      const std::unordered_set<const Blob*>& shared_by_set);
 
   bool is_current_data_valid() const {
     return data_tensor_->is_current_valid();

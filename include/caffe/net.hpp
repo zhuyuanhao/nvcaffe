@@ -292,6 +292,10 @@ class Net {
     return inner_net_;
   }
 
+  bool eltwise_mem_sharing() const {
+    return eltwise_mem_sharing_;
+  }
+
   void update_wgrad_max(const Blob* param, int type_id);
   void update_grad_scale();
   std::string print_current_device() const;
@@ -433,6 +437,7 @@ class Net {
   bool global_grad_scale_adaptive_;
   /// Inner net runs on singe GPU (see recurrent layers)
   const bool inner_net_;
+  bool eltwise_mem_sharing_;
 
   static constexpr int END_OF_ITERATION = -1;
   static constexpr int END_OF_TRAIN = -2;

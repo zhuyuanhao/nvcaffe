@@ -36,7 +36,8 @@ Net::Net(const NetParameter& param,
       solver_(nullptr),
       solver_rank_(solver_rank),
       solver_init_flag_(solver_init_flag),
-      inner_net_(inner_net) {
+      inner_net_(inner_net),
+      eltwise_mem_sharing_(false) {
   Init(param);
 }
 
@@ -52,7 +53,8 @@ Net::Net(const string& param_file,
       solver_(nullptr),
       solver_rank_(solver_rank),
       solver_init_flag_(solver_init_flag),
-      inner_net_(inner_net) {
+      inner_net_(inner_net),
+      eltwise_mem_sharing_(false) {
   NetParameter param;
   ReadNetParamsFromTextFileOrDie(param_file, &param);
   // Set phase, stages and level
@@ -420,6 +422,7 @@ void Net::Init(const NetParameter& in_param) {
   }
   debug_info_ = param.debug_info();
   trained_layers_shared_ = false;
+  eltwise_mem_sharing_ = param.eltwise_mem_sharing();
   LOG_IF(INFO, Caffe::root_solver()) << "Network initialization done.";
 }
 

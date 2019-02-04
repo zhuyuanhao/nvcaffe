@@ -71,54 +71,32 @@ const int* Blob::gpu_shape() const {
   return static_cast<const int*>(shape_data_->gpu_data());
 }
 
-void Blob::ShareData(Blob& other) {
+void Blob::ShareData(const Blob& other) {
   CHECK_NE(this, &other);
 //  CHECK(!other.IsSharedDataCycled());
   if (data_tensor_.get() == other.data_tensor_.get()) {
     CHECK_EQ(data_shared_with_, &other);
-    CHECK_GT(other.data_shared_by_.count(this), 0);
     return;
   }
   CHECK_EQ(count(), other.count());
   data_tensor_ = other.data_tensor_;
   data_shared_with_ = &other;
-  other.data_shared_by_.insert({this});
   CHECK(data_type() == other.data_type());
   CHECK(is_current_data_valid());
 }
 
-void Blob::ShareDiff(Blob& other) {
+void Blob::ShareDiff(const Blob& other) {
   CHECK_NE(this, &other);
 ///  CHECK(!other.IsSharedDiffCycled());
   if (diff_tensor_.get() == other.diff_tensor_.get()) {
     CHECK_EQ(diff_shared_with_, &other);
-    CHECK_GT(other.diff_shared_by_.count(this), 0);
     return;
   }
   CHECK_EQ(count(), other.count());
   diff_tensor_ = other.diff_tensor_;
   diff_shared_with_ = &other;
-  other.diff_shared_by_.insert({this});
   CHECK(diff_type() == other.diff_type());
   CHECK(is_current_diff_valid());
-}
-
-bool Blob::by(bool dt, int level, std::unordered_set<const Blob*>& node_set,
-    const std::unordered_set<const Blob*>& shared_by_set) {
-  if (level > 10) {
-    return false;
-  }
-  for (const Blob *shared_by : shared_by_set) {
-    if (node_set.count(shared_by) > 0) {
-      return true;
-    }
-    node_set.insert({shared_by});
-    if (by(dt, level + 1, node_set,
-        dt ? shared_by->data_shared_by_ : shared_by->diff_shared_by_)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 bool Blob::IsSharedDataCycled(const vector<Blob*>& others) {
@@ -132,24 +110,8 @@ bool Blob::IsSharedDataCycled(const vector<Blob*>& others) {
       node_set.insert({data_shared_with});
       data_shared_with = data_shared_with->data_shared_with_;
     }
-    if (by(true, 0, node_set, other->data_shared_by_)) {
-      return true;
-    }
   }
   return false;
-}
-
-bool Blob::IsSharedDataCycled(const Blob* other) {
-  std::unordered_set<const Blob*> node_set;
-  const Blob *data_shared_with = other->data_shared_with_;
-  while (data_shared_with != nullptr) {
-    if (node_set.count(data_shared_with) > 0) {
-      return true;
-    }
-    node_set.insert({data_shared_with});
-    data_shared_with = data_shared_with->data_shared_with_;
-  }
-  return by(true, 0, node_set, other->data_shared_by_);
 }
 
 bool Blob::IsSharedDiffCycled(const vector<Blob*>& others) {
@@ -163,25 +125,6 @@ bool Blob::IsSharedDiffCycled(const vector<Blob*>& others) {
       node_set.insert({diff_shared_with});
       diff_shared_with = diff_shared_with->diff_shared_with_;
     }
-    if (by(false, 0, node_set, other->diff_shared_by_)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool Blob::IsSharedDiffCycled(const Blob* other) {
-  std::unordered_set<const Blob*> node_set;
-  const Blob *diff_shared_with = other->diff_shared_with_;
-  while (diff_shared_with != nullptr) {
-    if (node_set.count(diff_shared_with) > 0) {
-      return true;
-    }
-    node_set.insert({diff_shared_with});
-    diff_shared_with = diff_shared_with->diff_shared_with_;
-  }
-  if (by(false, 0, node_set, other->diff_shared_by_)) {
-    return true;
   }
   return false;
 }
