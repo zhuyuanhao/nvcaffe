@@ -76,6 +76,7 @@ void Net::Init(const NetParameter& in_param) {
       << "root_net_ needs to be set for all non-root solvers";
   // Set phase from the state.
   phase_ = in_param.state().phase();
+  eltwise_mem_sharing_ = in_param.eltwise_mem_sharing();
   // Filter layers based on their include/exclude rules and
   // the current NetState.
   NetParameter filtered_param;
@@ -815,9 +816,13 @@ void Net::ReduceAndUpdate() {
   const bool clear_grads = !solver_->param().snapshot_diff() && !clip_grads;
   const bool use_buckets = reduce_buckets_ > 0;
   float rate = -1.F;
-  while (!solver_->stop_reducing_requested()) {
+  bool ic = false;
+  while (true) {
     const int param_id = reduction_queue_.pop();
     if (param_id == END_OF_TRAIN) {
+      if(!ic) {
+        solver_->iteration_complete_signal();
+      }
       break;
     }
 
@@ -841,6 +846,7 @@ void Net::ReduceAndUpdate() {
       rate = solver_->GetLearningRate();
     }
     if (param_id != END_OF_ITERATION) {
+      ic = false;
       if (Caffe::solver_count() > 1) {
         if (!use_buckets && !clip_grads) {
           Reduce(param_id);
@@ -912,6 +918,7 @@ void Net::ReduceAndUpdate() {
       CHECK(au_ids[1].empty());
       rate = -1.F;
       solver_->iteration_complete_signal();
+      ic = true;
     } else {
       au_ids[type_id].insert(param_id);
     }

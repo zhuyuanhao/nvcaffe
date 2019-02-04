@@ -338,10 +338,11 @@ class Caffe {
 
   // Getters for boost rng, curand, and cublas handles
   static RNG& rng_stream() {
-    if (!Get().random_generator_) {
-      Get().random_generator_.reset(new RNG());
+    Caffe& c = Get();
+    if (!c.random_generator_) {
+      c.random_generator_.reset(new RNG());
     }
-    return *(Get().random_generator_);
+    return *(c.random_generator_);
   }
   static cudaStream_t thread_stream(int group = 0) {
     return Get().pstream(group)->get();

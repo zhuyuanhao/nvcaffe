@@ -50,15 +50,8 @@ Caffe& Caffe::Get() {
   // Make sure each thread can have different values.
   // We also need to care about device id.
   std::lock_guard<std::mutex> lock(caffe_mutex_);
-  static thread_local unique_ptr<Caffe> caffe;
-  if (!caffe) {
-    caffe.reset(new Caffe());
-    ++thread_count_;
-    DLOG(INFO) << "[" << current_device()
-               << "] New Caffe instance " << caffe.get()
-               << ", count " << thread_count_ << ", thread " << lwp_id();
-  }
-  return *caffe;
+  static thread_local Caffe caffe;
+  return caffe;
 }
 
 // random seeding
@@ -136,6 +129,10 @@ Caffe::Caffe()
       random_generator_(),
       is_root_solver_(true),
       device_(current_device()) {
+  ++thread_count_;
+  DLOG(INFO) << "[" << current_device()
+             << "] New Caffe instance " << this
+             << ", count " << thread_count_ << ", thread " << lwp_id();
   init();
 }
 
