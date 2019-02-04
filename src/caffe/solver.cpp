@@ -221,10 +221,8 @@ void Solver::Step(int iters) {
               << Caffe::current_device();
   }
 
-  uint64_t random_seed = param_.random_seed() >= 0 ?
-      static_cast<uint64_t>(param_.random_seed() + P2PManager::global_rank()) : Caffe::next_seed();
-  reduce_thread_.reset(new boost::thread(&Solver::Reduce, this, callback(),
-      Caffe::current_device(), mode, random_seed, root_solver));
+  uint64_t random_seed = param_.random_seed() >= 0 ? static_cast<uint64_t>(param_.random_seed() +
+      P2PManager::global_rank()) : Caffe::next_seed();
 
   size_t epoch_count = 0UL;
   unsigned int bps = net_->batch_per_solver();
@@ -234,43 +232,48 @@ void Solver::Step(int iters) {
   const bool test_and_snapshot_enabled = ts_epochs_remaining > 0;
   --ts_epochs_remaining;
 
+  vector<float> scores;
+  const bool use_multi_gpu_testing = Caffe::device_in_use_per_host_count() > 1;
+  const string mgpu_str = use_multi_gpu_testing ? "[MultiGPU] " : "";
+  LOG_IF(INFO, rank_ == 0) << mgpu_str << "Initial Test started...";
+  iteration_timer_->Start();
+  scores = TestAll(1, use_multi_gpu_testing);
+  callback_soft_barrier();
+  float lapse = iteration_timer_->Seconds();
+  LOG_IF(INFO, rank_ == 0) << mgpu_str << "Initial Test completed in " << lapse << "s";
+
+  unique_ptr<boost::thread> reduce_thread;
+  if (net_->phase() == TRAIN) {
+    reduce_thread.reset(
+        new boost::thread(&Solver::Reduce, this, callback(), Caffe::current_device(), mode,
+            random_seed, root_solver));
+  }
+
   while (iter_ < stop_iter) {
     if (param_.snapshot_diff() || param_.clip_gradients() >= 0.F) {
       net_->ClearParamDiffs();
     }  // we clean them in ApplyUpdate otherwise
 
+    // Just started or restored?
+    const bool first_loop = iter_ == 0 || iterations_last_ < 0;
     bool test_and_snapshot = false;
-    if (test_and_snapshot_enabled
-         && ((epochs > 0.
-         && epochs_passed + ts_epochs_remaining >= epochs)
-        || (epochs == 0. && iter_ + 1 == stop_iter && ts_epochs_remaining > 0))) {
+    if (test_and_snapshot_enabled &&
+        ((epochs > 0. && epochs_passed + ts_epochs_remaining >= epochs) ||
+         (epochs == 0. && iter_ + 1 == stop_iter && ts_epochs_remaining > 0))) {
       --ts_epochs_remaining;
       test_and_snapshot = true;
     }
-    vector<float> scores;
-
-    // Just started or restored?
-    const bool first_loop = iter_ == 0 || iterations_last_ < 0;
-    const bool use_multi_gpu_testing = Caffe::device_in_use_per_host_count() > 1;
-      const string mgpu_str = use_multi_gpu_testing ? "[MultiGPU] " : "";
-      if (iter_ == 0) {
-        LOG_IF(INFO, rank_ == 0) << mgpu_str << "Initial Test started...";
-        iteration_timer_->Start();
-        scores = TestAll(1, use_multi_gpu_testing);
-        callback_soft_barrier();
-        float lapse = iteration_timer_->Seconds();
-        LOG_IF(INFO, rank_ == 0) << mgpu_str << "Initial Test completed in "
-                                           << lapse << "s";
-      } else if (test_and_snapshot || (param_.test_interval()
-                                       && iter_ % param_.test_interval() == 0
-                                       && iterations_last_ >= 0)) {
-        iteration_timer_->Start();
-        scores = TestAll(0, use_multi_gpu_testing);
-        callback_soft_barrier();
-        float lapse = iteration_timer_->Seconds();
-        LOG_IF(INFO, rank_ == 0) << mgpu_str << "Tests completed in "
-                                           << lapse << "s";
-      }
+    if (test_and_snapshot ||
+        (!first_loop
+        && param_.test_interval()
+        && iter_ % param_.test_interval() == 0
+        && iterations_last_ >= 0)) {
+      iteration_timer_->Start();
+      scores = TestAll(0, use_multi_gpu_testing);
+      callback_soft_barrier();
+      float lapse = iteration_timer_->Seconds();
+      LOG_IF(INFO, rank_ == 0) << mgpu_str << "Tests completed in " << lapse << "s";
+    }
     if (requested_early_exit_) {
       // Break out of the while loop because stop was requested while testing.
       break;
@@ -289,7 +292,9 @@ void Solver::Step(int iters) {
       iteration_timer_->Start();
     }
 
-    iteration_start_signal();
+    if (net_->phase() == TRAIN) {
+      iteration_start_signal();
+    }
     for (int i = 0; i < param_.iter_size(); ++i) {
       loss += net_->ForwardBackward(i + 1 == param_.iter_size());
       if (i == 0) {
@@ -299,11 +304,12 @@ void Solver::Step(int iters) {
       }
     }
     loss /= param_.iter_size();
-    iteration_wait();
-    if (requested_early_exit_) {
-      iteration_cancel();
+    if (net_->phase() == TRAIN) {
+      iteration_wait();
+      if (requested_early_exit_) {
+        iteration_cancel();
+      }
     }
-
     if (requested_early_exit_) {
       total_lapse_ += iteration_timer_->Seconds();
       break;
@@ -311,10 +317,10 @@ void Solver::Step(int iters) {
 
     epoch_count = Caffe::epoch_count();
     if (epoch_count > 0UL) {
-      epochs = (double) (iters * param_.iter_size() * bps *
-          Caffe::solver_count()) / epoch_count;
-      epochs_passed = (double) (iter() * param_.iter_size() * bps *
-          Caffe::solver_count()) / epoch_count;
+      epochs = (double) (iters * param_.iter_size() * bps * Caffe::solver_count()) 
+          / epoch_count;
+      epochs_passed = (double) (iter() * param_.iter_size() * bps * Caffe::solver_count())
+          / epoch_count;
     }
     // average the loss across iterations for smoothed reporting
     UpdateSmoothedLoss(loss, start_iter, average_loss);
@@ -330,38 +336,30 @@ void Solver::Step(int iters) {
       if (rel_iter > 2) {  // we skip 0,1,2 for correct benchmarking
         total_lapse_ += lapse;
         float per_s = (iter_ - iterations_last_) / (lapse > 0.F ? lapse : 1.F);
-        LOG_IF(INFO, rank_ == 0) << "    " << net_->print_current_device()
-                                     << " Iteration "
-                                     << (iter_ + 1 == stop_iter ? stop_iter : iter_)
-                                     << " (" << per_s << " iter/s, " << lapse << "s/"
-                                     << (iter_ - iterations_last_) << " iter), "
-                                     << os_ep.str() << "loss = "
-                                     << smoothed_loss_;
+        LOG_IF(INFO, rank_ == 0) << "    " << net_->print_current_device() << " Iteration "
+                                 << (iter_ + 1 == stop_iter ? stop_iter : iter_) << " (" << per_s
+                                 << " iter/s, " << lapse << "s/" << (iter_ - iterations_last_)
+                                 << " iter), " << os_ep.str() << "loss = " << smoothed_loss_;
       } else {
-        LOG_IF(INFO, rank_ == 0) << "    " << net_->print_current_device()
-                                           << " Iteration "
-                                           << (iter_ + 1 == stop_iter ? stop_iter : iter_)
-                                           << " (" << lapse << " s), "
-                                           << os_ep.str() << "loss = " << smoothed_loss_;
+        LOG_IF(INFO, rank_ == 0) << "    " << net_->print_current_device() << " Iteration "
+                                 << (iter_ + 1 == stop_iter ? stop_iter : iter_) << " (" << lapse
+                                 << " s), " << os_ep.str() << "loss = " << smoothed_loss_;
       }
       const vector<Blob*>& result = net_->output_blobs();
       int score_index = 0;
       for (int j = 0; j < result.size(); ++j) {
         const float* result_vec = result[j]->cpu_data<float>();
-        const string& output_name =
-            net_->blob_names()[net_->output_blob_indices()[j]];
-        const float loss_weight =
-            net_->blob_loss_weights()[net_->output_blob_indices()[j]];
+        const string& output_name = net_->blob_names()[net_->output_blob_indices()[j]];
+        const float loss_weight = net_->blob_loss_weights()[net_->output_blob_indices()[j]];
         for (int k = 0; k < result[j]->count(); ++k) {
           ostringstream loss_msg_stream;
           if (loss_weight) {
-            loss_msg_stream << " (* " << loss_weight
-                << " = " << (loss_weight * result_vec[k]) << " loss)";
+            loss_msg_stream << " (* " << loss_weight << " = " << (loss_weight * result_vec[k])
+                            << " loss)";
           }
-          LOG_IF(INFO, rank_ == 0) << "    " << net_->print_current_device()
-              << "     Train net output #"
-              << score_index++ << ": " << output_name << " = "
-              << result_vec[k] << loss_msg_stream.str();
+          LOG_IF(INFO, rank_ == 0)
+          << "    " << net_->print_current_device() << "     Train net output #" << score_index++
+          << ": " << output_name << " = " << result_vec[k] << loss_msg_stream.str();
         }
       }
       PrintRate();
@@ -388,11 +386,11 @@ void Solver::Step(int iters) {
     }
     net_->update_grad_scale();
   }
-  if (!stop_reducing_requested()) {
+
+  if (reduce_thread) {
     stop_reducing();
-  }
-  if (reduce_thread_->joinable()) {
-    reduce_thread_->join();
+    reduce_thread->join();
+    reduce_thread.reset();
   }
 }
 

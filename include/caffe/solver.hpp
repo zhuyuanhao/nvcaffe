@@ -144,10 +144,6 @@ class Solver {
   }
   void stop_reducing() const {
     net_->Finalize();
-    reduce_thread_->interrupt();
-  }
-  bool stop_reducing_requested() const {
-    return reduce_thread_->interruption_requested();
   }
 
   void CheckSnapshotWritePermissions();
@@ -217,7 +213,6 @@ class Solver {
   vector<Callback*> root_callbacks_;
   vector<float> losses_;
   float smoothed_loss_;
-  unique_ptr<boost::thread> reduce_thread_;
 
   // The root solver that holds root nets (actually containing shared layers)
   // in data parallelism
