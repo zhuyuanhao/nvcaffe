@@ -16,9 +16,9 @@ void ExpLayer<Ftype, Btype>::LayerSetUp(const vector<Blob*>& bottom,
   // If base == -1, interpret the base as e and set log_base = 1 exactly.
   // Otherwise, calculate its log explicitly.
   const float log_base = base == -1.F ? 1.F : log(base);
-  CHECK(!isnan(log_base))
+  CHECK(!std::isnan(log_base))
       << "NaN result: log(base) = log(" << base << ") = " << log_base;
-  CHECK(!isinf(log_base))
+  CHECK(!std::isinf(log_base))
       << "Inf result: log(base) = log(" << base << ") = " << log_base;
   const float input_scale = this->layer_param_.exp_param().scale();
   const float input_shift = this->layer_param_.exp_param().shift();
