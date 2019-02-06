@@ -181,7 +181,7 @@ P2PSync::~P2PSync() {
 
 void P2PSync::InternalThreadEntry() {
   CHECK_EQ(nranks_, Caffe::solver_count());
-  CHECK_EQ(target_device_, Caffe::current_device());
+  CHECK_EQ(target_device_, Caffe::device());
   const bool root = rank_ % (nranks_ / P2PManager::global_count()) == 0;
   if (root) {
     Caffe::set_root_solver(true);

@@ -271,7 +271,7 @@ bool DataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, size_t que
   Btype* dst_cptr = nullptr;
   if (use_gpu_transform) {
     size_t buffer_size = top_shape[0] * top_shape[1] * init_datum_height * init_datum_width;
-    tmp_gpu_buffer_[thread_id]->safe_reserve(buffer_size);
+    tmp_gpu_buffer_[thread_id]->safe_reserve(buffer_size, Caffe::device());
     dst_gptr = tmp_gpu_buffer_[thread_id]->data();
   } else {
     dst_cptr = batch->data_->template mutable_cpu_data_c<Btype>(false);

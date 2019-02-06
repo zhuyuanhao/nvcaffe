@@ -48,9 +48,9 @@ std::uint64_t lwp_dev_id(int dev) {
 
 Caffe& Caffe::Get() {
   // Make sure each thread can have different values.
-  // We also need to care about device id.
   std::lock_guard<std::mutex> lock(caffe_mutex_);
   static thread_local Caffe caffe;
+  DCHECK_EQ(caffe.device(), current_device()) << " thread " << lwp_id();
   return caffe;
 }
 
@@ -128,9 +128,10 @@ Caffe::Caffe()
     : curand_generator_(nullptr),
       random_generator_(),
       is_root_solver_(true),
-      device_(current_device()) {
+      device_(current_device()),
+      thread_id_(lwp_id()) {
   ++thread_count_;
-  DLOG(INFO) << "[" << current_device()
+  DLOG(INFO) << "[" << _device()
              << "] New Caffe instance " << this
              << ", count " << thread_count_ << ", thread " << lwp_id();
   init();
@@ -190,7 +191,7 @@ CudaStream::CudaStream(bool high_priority) {
     CUDA_CHECK(cudaStreamCreate(&stream_));
   }
   DLOG(INFO) << "New " << (high_priority ? "high priority " : "") << "stream "
-      << stream_ << ", device " << Caffe::current_device() << ", thread "
+      << stream_ << ", device " << Caffe::device() << ", thread "
       << lwp_id();
 }
 
@@ -428,7 +429,7 @@ CuBLASHandle::CuBLASHandle()
   CUBLAS_CHECK(cublasCreate(&handle_));
   CUBLAS_CHECK(cublasSetStream(handle_, stream_->get()));
 }
-CuBLASHandle::CuBLASHandle(shared_ptr<CudaStream>&& stream)
+CuBLASHandle::CuBLASHandle(shared_ptr<CudaStream> stream)
     : handle_(nullptr), stream_(std::move(stream)) {
   CUBLAS_CHECK(cublasCreate(&handle_));
   CUBLAS_CHECK(cublasSetStream(handle_, stream_->get()));
@@ -437,7 +438,7 @@ CuBLASHandle::~CuBLASHandle() {
   CUBLAS_CHECK(cublasDestroy(handle_));
 }
 #ifdef USE_CUDNN
-CuDNNHandle::CuDNNHandle(shared_ptr<CudaStream>&& stream)
+CuDNNHandle::CuDNNHandle(shared_ptr<CudaStream> stream)
   : handle_(nullptr), stream_(std::move(stream)) {
   CUDNN_CHECK(cudnnCreate(&handle_));
   CUDNN_CHECK(cudnnSetStream(handle_, stream_->get()));

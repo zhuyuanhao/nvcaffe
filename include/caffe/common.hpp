@@ -3,24 +3,7 @@
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-
-#if __CUDACC_VER_MAJOR__ >= 9
-#undef __CUDACC_VER__
-#define __CUDACC_VER__ \
-  ((__CUDACC_VER_MAJOR__ * 10000) + (__CUDACC_VER_MINOR__ * 100))
-#endif
-
 #include <boost/version.hpp>
-#if BOOST_VERSION >= 106100
-// error: class "boost::common_type<long, long>" has no member "type"
-#define BOOST_NO_CXX11_VARIADIC_TEMPLATES
-#if defined(__CUDACC_VER_MAJOR__) && defined(__CUDACC_VER_MINOR__) && defined(__CUDACC_VER_BUILD__)
-#define BOOST_CUDA_VERSION \
-  __CUDACC_VER_MAJOR__ * 1000000 + __CUDACC_VER_MINOR__ * 10000 + __CUDACC_VER_BUILD__
-#else
-#define BOOST_CUDA_VERSION 8000000
-#endif
-#endif
 
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
@@ -41,201 +24,19 @@
 #include <thread>
 #include <utility>  // pair
 #include <vector>
-
 #ifdef USE_CUDNN
 #  include <cudnn.h>
 #endif
+
 #include "caffe/util/device_alternate.hpp"
-
 #include "caffe/util/float16.hpp"
-#if CUDA_VERSION >= 8000
-#  define CAFFE_DATA_HALF CUDA_R_16F
-#else
-#  define CAFFE_DATA_HALF CUBLAS_DATA_HALF
-#endif
-// Convert macro to string
-#define STRINGIFY(m) #m
-#define AS_STRING(m) STRINGIFY(m)
-
-// gflags 2.1 issue: namespace google was changed to gflags without warning.
-// Luckily we will be able to use GFLAGS_GFLAGS_H_ to detect if it is version
-// 2.1. If yes, we will add a temporary solution to redirect the namespace.
-// TODO(Yangqing): Once gflags solves the problem in a more elegant way, let's
-// remove the following hack.
-#ifndef GFLAGS_GFLAGS_H_
-namespace gflags = google;
-#endif  // GFLAGS_GFLAGS_H_
-
-// Disable the copy and assignment operator for a class.
-#define DISABLE_COPY_MOVE_AND_ASSIGN(classname) \
-  classname(const classname&) = delete;\
-  classname(classname&&) = delete;\
-  classname& operator=(const classname&) = delete; \
-  classname& operator=(classname&&) = delete
-
-#define INSTANTIATE_CLASS_CPU(classname) \
-  char gInstantiationGuard##classname; \
-  template class classname<float>; \
-  template class classname<double>
-
-#define INSTANTIATE_CLASS_CPU_FB(classname) \
-  char gInstantiationGuard##classname; \
-  template class classname<float, float>; \
-  template class classname<float, double>; \
-  template class classname<double, float>; \
-  template class classname<double, double>
-
-// Instantiate a class with float and double specifications.
-# define INSTANTIATE_CLASS(classname) \
-    INSTANTIATE_CLASS_CPU(classname); \
-    template class classname<float16>
-
-# define INSTANTIATE_CLASS_FB(classname) \
-    INSTANTIATE_CLASS_CPU_FB(classname); \
-    template class classname<float16, float>; \
-    template class classname<float, float16>; \
-    template class classname<float16, double>; \
-    template class classname<double, float16>; \
-    template class classname<float16, float16>
-
-# define INSTANTIATE_LAYER_GPU_FORWARD(classname) \
-  template void classname<float>::Forward_gpu( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top); \
-  template void classname<double>::Forward_gpu( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top)
-
-# define INSTANTIATE_LAYER_GPU_FORWARD_F16_FB(classname, member) \
-  template void classname<float16, float>::member( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top); \
-  template void classname<float, float16>::member( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top); \
-  template void classname<float16, double>::member( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top); \
-  template void classname<double, float16>::member( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top); \
-  template void classname<float16, float16>::member( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top)
-
-# define INSTANTIATE_LAYER_GPU_BACKWARD_F16_FB(classname, member) \
-  template void classname<float16, float>::member( \
-      const std::vector<Blob*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob*>& bottom); \
-  template void classname<float, float16>::member( \
-      const std::vector<Blob*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob*>& bottom); \
-  template void classname<float16, double>::member( \
-      const std::vector<Blob*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob*>& bottom); \
-  template void classname<double, float16>::member( \
-      const std::vector<Blob*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob*>& bottom); \
-  template void classname<float16, float16>::member( \
-      const std::vector<Blob*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob*>& bottom)
-
-# define INSTANTIATE_LAYER_GPU_FORWARD_FB(classname, member) \
-  template void classname<float, float>::member( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top); \
-  template void classname<float, double>::member( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top); \
-  template void classname<double, float>::member( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top); \
-  template void classname<double, double>::member( \
-      const std::vector<Blob*>& bottom, \
-      const std::vector<Blob*>& top);
-
-# define INSTANTIATE_LAYER_GPU_BACKWARD_FB(classname, member) \
-  template void classname<float, float>::member( \
-      const std::vector<Blob*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob*>& bottom); \
-  template void classname<float, double>::member( \
-      const std::vector<Blob*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob*>& bottom); \
-  template void classname<double, float>::member( \
-      const std::vector<Blob*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob*>& bottom); \
-  template void classname<double, double>::member( \
-      const std::vector<Blob*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob*>& bottom)
-
-#  define INSTANTIATE_LAYER_GPU_FORWARD_ONLY_FB(classname) \
-    INSTANTIATE_LAYER_GPU_FORWARD_FB(classname, Forward_gpu); \
-    INSTANTIATE_LAYER_GPU_FORWARD_F16_FB(classname, Forward_gpu)
-
-#  define INSTANTIATE_LAYER_GPU_BACKWARD_ONLY_FB(classname) \
-    INSTANTIATE_LAYER_GPU_BACKWARD_FB(classname, Backward_gpu); \
-    INSTANTIATE_LAYER_GPU_BACKWARD_F16_FB(classname, Backward_gpu)
-
-#  define INSTANTIATE_LAYER_GPU_FUNCS_FB(classname) \
-    INSTANTIATE_LAYER_GPU_FORWARD_FB(classname, Forward_gpu); \
-    INSTANTIATE_LAYER_GPU_FORWARD_F16_FB(classname, Forward_gpu); \
-    INSTANTIATE_LAYER_GPU_BACKWARD_FB(classname, Backward_gpu); \
-    INSTANTIATE_LAYER_GPU_BACKWARD_F16_FB(classname, Backward_gpu)
-
-#  define INSTANTIATE_LAYER_GPU_FW_MEMBER_FB(classname, member) \
-    INSTANTIATE_LAYER_GPU_FORWARD_FB(classname, member); \
-    INSTANTIATE_LAYER_GPU_FORWARD_F16_FB(classname, member)
-
-#  define INSTANTIATE_LAYER_GPU_BW_MEMBER_FB(classname, member) \
-    INSTANTIATE_LAYER_GPU_BACKWARD_FB(classname, member); \
-    INSTANTIATE_LAYER_GPU_BACKWARD_F16_FB(classname, member)
-
-
-// A simple macro to mark codes that are not implemented, so that when the code
-// is executed we will see a fatal log.
-#define NOT_IMPLEMENTED LOG(FATAL) << "Not Implemented Yet"
+#include "caffe/util/gpu_memory.hpp"
+#include "caffe/macros.hpp"
 
 // See PR #1236
 namespace cv { class Mat; }
 
 namespace caffe {
-
-// Common functions and classes from std that caffe often uses.
-using std::fstream;
-using std::ios;
-using std::isnan;
-using std::isinf;
-using std::iterator;
-using std::make_pair;
-using std::map;
-using std::unordered_map;
-using std::ostringstream;
-using std::pair;
-using std::set;
-using std::string;
-using std::stringstream;
-using std::vector;
-using std::unique_ptr;
-using std::mutex;
-using std::lock_guard;
-// std::shared_ptr would be better but pycaffe breaks
-using boost::shared_ptr;
-using boost::weak_ptr;
-using boost::make_shared;
-using boost::shared_mutex;
-using boost::shared_lock;
-using boost::upgrade_lock;
-using boost::unique_lock;
-using boost::upgrade_to_unique_lock;
 
 std::uint32_t lwp_id();
 std::uint64_t lwp_dev_id(int dev = -1);
@@ -253,7 +54,6 @@ void atomic_minimum(std::atomic<Dtype>& min_val, Dtype const& new_val) noexcept 
   while (prev_val > new_val &&
          !min_val.compare_exchange_weak(prev_val, new_val)) {}
 }
-
 
 // Shared CUDA Stream for correct life cycle management
 class CudaStream {
@@ -278,7 +78,7 @@ class CudaStream {
 
 struct CuBLASHandle {
   CuBLASHandle();
-  explicit CuBLASHandle(shared_ptr<CudaStream>&& stream);
+  explicit CuBLASHandle(shared_ptr<CudaStream> stream);
   ~CuBLASHandle();
 
   cublasHandle_t get() const {
@@ -292,7 +92,7 @@ struct CuBLASHandle {
 
 #ifdef USE_CUDNN
 struct CuDNNHandle {
-  explicit CuDNNHandle(shared_ptr<CudaStream>&& stream);
+  explicit CuDNNHandle(shared_ptr<CudaStream> stream);
   ~CuDNNHandle();
 
   cudnnHandle_t get() const {
@@ -336,6 +136,10 @@ class Caffe {
     shared_ptr<Generator> generator_;
   };
 
+  // Current thread
+  static std::uint32_t thread_id() {
+    return Get().thread_id_;
+  }
   // Getters for boost rng, curand, and cublas handles
   static RNG& rng_stream() {
     Caffe& c = Get();
@@ -367,11 +171,16 @@ class Caffe {
     return Get().th_cudnn_handle(group);
   }
 #endif
+  static caffe::GPUMemory::Workspace& ws(size_t id) {
+    return Get()._ws(id);
+  }
+  static int device() {
+    return Get()._device();
+  }
 
   static void report_epoch_count(size_t rec) {
     atomic_minimum(epoch_count_, rec);
   }
-
   static size_t epoch_count() {
     size_t count = epoch_count_.load();
     if (count == (size_t)-1L) {
@@ -520,7 +329,8 @@ class Caffe {
 
   shared_ptr<RNG> random_generator_;
   bool is_root_solver_;
-  const int device_;
+  const int device_;  // CUDA device where constructor was invoked
+  const std::uint32_t thread_id_;
 
   // Default device chosen by a user and associated with the main thread.
   // For example, if user runs `caffe train -gpu=1,0,3` then it has to be set to 1.
@@ -537,12 +347,23 @@ class Caffe {
   static std::atomic<size_t> epoch_count_;
   shared_ptr<CudaStream> curand_stream_;
 
+  // Workspaces used by all Convolution layers one after another.
+  // We carry them global to prevent unnecessary allocations/deallocations
+  // because they hurt performance. It's also shared between TRAIN and TESTS nets.
+  caffe::GPUMemory::Workspace ws_[CAFFE_WS_TOTAL];
+
  private:
   // The private constructor to avoid duplicate instantiation.
   Caffe();
 
   void init();  // when Brew mode changes
   void set_random_seed_int(uint64_t random_seed);
+  int _device() const {
+    return device_;
+  }
+  caffe::GPUMemory::Workspace& _ws(size_t id) {
+    return ws_[id];
+  }
 
   DISABLE_COPY_MOVE_AND_ASSIGN(Caffe);
 

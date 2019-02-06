@@ -90,7 +90,6 @@ class CuDNNConvolutionLayer : public ConvolutionLayer<Ftype, Btype> {
 
  private:
   bool use_algo_seeker_;
-
   bool use_reshape_;
   bool initialized_cached_descs_;
   size_t fwd_count_, bwd_count_;
@@ -106,7 +105,7 @@ class CuDNNConvolutionLayer : public ConvolutionLayer<Ftype, Btype> {
   void GetConvAlgo(const vector<Blob*>& bottom, const vector<Blob*>& top,
       const size_t workspace_bytes, int pad_h, int pad_w, int stride_h, int stride_w);
 
-  void AllocateFindExWorkspace();
+  size_t AllocateFindExWorkspace();
   size_t AllocateWorkspace(size_t bottom_size);
 
   vector<cudnnTensorDescriptor_t> fwd_cached_bottom_descs_, bwd_cached_bottom_descs_;

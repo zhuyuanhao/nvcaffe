@@ -60,12 +60,12 @@ template<typename Ftype, typename Btype>
 BasePrefetchingDataLayer<Ftype, Btype>::BasePrefetchingDataLayer(const LayerParameter& param,
     size_t solver_rank)
     : BaseDataLayer<Ftype, Btype>(param, threads(param)),
-      InternalThread(Caffe::current_device(), solver_rank, threads(param), false),
+      InternalThread(Caffe::device(), solver_rank, threads(param), false),
       auto_mode_(Caffe::mode() == Caffe::GPU && this->phase_ == TRAIN && auto_mode(param)),
       parsers_num_(parser_threads(param)),
       transf_num_(threads(param)),
       queues_num_(transf_num_ * parsers_num_),
-      batch_transformer_(make_shared<BatchTransformer<Ftype, Btype>>(Caffe::current_device(),
+      batch_transformer_(make_shared<BatchTransformer<Ftype, Btype>>(Caffe::device(),
           solver_rank, queues_num_, param.transform_param(), is_gpu_transform())),
       iter0_(true) {
   CHECK_EQ(transf_num_, threads_num());

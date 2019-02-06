@@ -56,7 +56,7 @@ void caffe_gpu_gemm<float16>(const CBLAS_TRANSPOSE TransA,
   cublasOperation_t cuTransB =
       (TransB == CblasNoTrans) ? CUBLAS_OP_N : CUBLAS_OP_T;
 
-  if (Caffe::device_capability(Caffe::current_device()) >= 503) {
+  if (Caffe::device_capability(Caffe::device()) >= 503) {
 #if CUDA_VERSION >= 9000
     cublasMath_t math_mode;
     CUBLAS_CHECK(cublasGetMathMode(handle, &math_mode));
@@ -117,7 +117,7 @@ void caffe_gpu_gemv<float16>(const CBLAS_TRANSPOSE TransA, const int M,
   int LDA = cuTransA == CUBLAS_OP_N ? m : k;
   int LDC = m;
 
-  if (Caffe::device_capability(Caffe::current_device()) >= 503) {
+  if (Caffe::device_capability(Caffe::device()) >= 503) {
 #if CUDA_VERSION >= 9000
     cublasMath_t math_mode;
     CUBLAS_CHECK(cublasGetMathMode(handle, &math_mode));
@@ -347,7 +347,7 @@ template<>
 void
 caffe_gpu_dot<float16, float16>(const int n, const float16* x, const float16* y, float16* out) {
   float fres;
-  GPUMemory::Workspace ws(sizeof(float), Caffe::current_device());
+  GPUMemory::Workspace ws(sizeof(float), Caffe::device());
   float* res = reinterpret_cast<float*>(ws.data());
   cudaStream_t stream = Caffe::thread_stream();
   // NOLINT_NEXT_LINE(whitespace/operators)
@@ -360,7 +360,7 @@ caffe_gpu_dot<float16, float16>(const int n, const float16* x, const float16* y,
 
 template<>
 void caffe_gpu_dot<float16, float>(const int n, const float16* x, const float16* y, float* out) {
-  GPUMemory::Workspace ws(sizeof(float), Caffe::current_device());
+  GPUMemory::Workspace ws(sizeof(float), Caffe::device());
   float* res = reinterpret_cast<float*>(ws.data());
   cudaStream_t stream = Caffe::thread_stream();
   // NOLINT_NEXT_LINE(whitespace/operators)
@@ -446,7 +446,7 @@ void caffe_gpu_set(const size_t N, const Dtype alpha, Dtype* Y) {
     set_kernel <<<CAFFE_GET_BLOCKS(N), CAFFE_CUDA_NUM_THREADS, 0, stream>>> (N, alpha, Y);
     CUDA_POST_KERNEL_CHECK;
   }
-  CUDA_CHECK_ARG2(cudaStreamSynchronize(stream), stream, Caffe::current_device());
+  CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
 template void

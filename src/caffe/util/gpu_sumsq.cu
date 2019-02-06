@@ -58,8 +58,8 @@ __device__ void sumsq_reduce_block(volatile TR *sdata, TR my_sum, unsigned int t
 __device__ unsigned int sumsq_blocks_count[REDUCTION_GROUPS_MAX];
 
 void set_sumsq_blocks_count(unsigned int cnt, int group, cudaStream_t stream) {
-  CUDA_CHECK_ARG(cudaMemcpyToSymbolAsync(sumsq_blocks_count, &cnt, sizeof(unsigned int),
-      group * sizeof(unsigned int), cudaMemcpyHostToDevice, stream), Caffe::current_device());
+  CUDA_CHECK(cudaMemcpyToSymbolAsync(sumsq_blocks_count, &cnt, sizeof(unsigned int),
+      group * sizeof(unsigned int), cudaMemcpyHostToDevice, stream));
 }
 
 template<unsigned int BlockSize, bool IsPow2, typename T, typename TR>
@@ -142,7 +142,7 @@ void gpu_sumsq_t(const int n, const T* x, TR* sum, int group) {
   const int threadsPerCta = CAFFE_CUDA_NUM_THREADS_HALF;
   const int nbrCtas = CAFFE_GET_BLOCKS_HALF(n);
   const int reduction_size = (nbrCtas + 1) * sizeof(TR);
-  GPUMemory::Workspace ws(reduction_size, Caffe::current_device());
+  GPUMemory::Workspace ws(reduction_size, Caffe::device());
   TR* dev_ptr_sq = reinterpret_cast<TR*>(ws.data());
   set_sumsq_blocks_count(0U, group, stream);
   if (po2 && n > CAFFE_CUDA_NUM_THREADS_HALF) {

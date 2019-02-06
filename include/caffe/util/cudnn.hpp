@@ -111,7 +111,7 @@ cudnnDataType_t cudnn_data_type(Type math) {
       ret = dataType<float>::conv_type;
       break;
     case FLOAT16:
-      if (caffe::Caffe::device_capability(caffe::Caffe::current_device()) >= 600) {
+      if (caffe::Caffe::device_capability(caffe::Caffe::device()) >= 600) {
         ret = dataType<float16>::conv_type;
       } else {
         ret = dataType<float>::conv_type;

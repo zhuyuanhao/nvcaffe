@@ -423,7 +423,6 @@ void Net::Init(const NetParameter& in_param) {
   }
   debug_info_ = param.debug_info();
   trained_layers_shared_ = false;
-  eltwise_mem_sharing_ = param.eltwise_mem_sharing();
   LOG_IF(INFO, Caffe::root_solver()) << "Network initialization done.";
 }
 
@@ -694,7 +693,9 @@ float Net::ForwardFromTo(int start, int end) {
     // << " BT " << Type_Name(layers_[i]->backward_type());
     float layer_loss = layers_[i]->Forward(bottom_vecs_[i], top_vecs_[i]);
     loss += layer_loss;
-    if (debug_info_) { ForwardDebugInfo(i); }
+    if (debug_info_) {
+      ForwardDebugInfo(i);
+    }
   }
   ++infer_count_;
   return loss;
@@ -808,7 +809,7 @@ size_t Net::received_contiguous_count(int type_id, const std::set<int>& au_ids,
 }
 
 void Net::ReduceAndUpdate() {
-  DLOG(INFO) << "[" << Caffe::current_device()
+  DLOG(INFO) << "[" << Caffe::device()
              << "] Entering ReduceAndUpdate thread " << lwp_id();
   size_t bucket_size = 0UL;
   std::set<int> au_ids[2];
@@ -820,7 +821,7 @@ void Net::ReduceAndUpdate() {
   while (true) {
     const int param_id = reduction_queue_.pop();
     if (param_id == END_OF_TRAIN) {
-      if(!ic) {
+      if (!ic) {
         solver_->iteration_complete_signal();
       }
       break;
@@ -1423,7 +1424,7 @@ void Net::InitializeLearnableDiffSpace(int type_id) {
   LOG(INFO) << print_current_device() << " Reserving "
             << learnable_space_size_[type_id] << " bytes of shared learnable space for type "
             << Type_Name(t);
-  learnable_space_[type_id].reserve(learnable_space_size_[type_id]);
+  learnable_space_[type_id].reserve(learnable_space_size_[type_id], Caffe::device());
   unsigned char* ptr = reinterpret_cast<unsigned char*>(learnable_space_[type_id].data());
   caffe_gpu_memset(learnable_space_size_[type_id], 0, ptr);
   for (int i = 0; i < layers_.size(); ++i) {
@@ -1481,7 +1482,7 @@ std::string Net::print_current_device() const {
   if (P2PManager::global_count() > 0) {
     os << P2PManager::global_rank() << ".";
   }
-  os << Caffe::current_device()
+  os << Caffe::device()
      << (phase_ == TRAIN ? "]" : ")");
   return os.str();
 }

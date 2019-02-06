@@ -133,9 +133,9 @@ void DetectNetTransformationLayer<Dtype>::Reshape(
 
   if (Caffe::mode() == Caffe::GPU) {
     const size_t aug_data_sz = sizeof(AugmentSelection) * bottom[0]->num();
-    gpu_workspace_augmentations_.reserve(aug_data_sz);
+    gpu_workspace_augmentations_.reserve(aug_data_sz, Caffe::device());
     const size_t tmp_data_sz = sizeof(Dtype) * bottom[0]->count();
-    gpu_workspace_tmpdata_.reserve(tmp_data_sz);
+    gpu_workspace_tmpdata_.reserve(tmp_data_sz, Caffe::device());
   }
 }
 

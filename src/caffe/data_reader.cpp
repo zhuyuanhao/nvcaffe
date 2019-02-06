@@ -26,7 +26,7 @@ DataReader<DatumType>::DataReader(const LayerParameter& param,
     bool cache,
     bool shuffle,
     bool epoch_count_required)
-    : InternalThread(Caffe::current_device(),
+    : InternalThread(Caffe::device(),
                      local_solver_rank, sample_only ? 1U : parser_threads_num, false),
       parser_threads_num_(threads_num()),
       transf_threads_num_(sample_only ? 1U : transf_threads_num),

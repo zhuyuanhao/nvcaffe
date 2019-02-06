@@ -223,7 +223,7 @@ void DataTransformer<Dtype>::TransformGPU(int N, int C, int H, int W,
           mean_values_.push_back(mean_values_[0]);
         }
       }
-      mean_values_gpu_.reserve(sizeof(float) * mean_values_.size());
+      mean_values_gpu_.reserve(sizeof(float) * mean_values_.size(), Caffe::device());
       caffe_copy(static_cast<int>(mean_values_.size()), &mean_values_.front(),
           reinterpret_cast<float*>(mean_values_gpu_.data()));
     }

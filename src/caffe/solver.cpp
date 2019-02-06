@@ -49,7 +49,6 @@ void Solver::Init() {
     Caffe::set_root_seed(static_cast<uint64_t>(param_.random_seed() + P2PManager::global_rank()));
   }
   // Scaffolding code
-  GPUMemory::InitWorkspaces();
   InitTrainNet();
   InitTestNets();
   LOG(INFO) << "Solver scaffolding done.";
@@ -218,7 +217,7 @@ void Solver::Step(int iters) {
     callback_soft_barrier();
     callback_->on_start(net_->learnable_params_mapped());
     LOG(INFO) << net_->print_current_device() << " Starting Optimization on GPU "
-              << Caffe::current_device();
+              << Caffe::device();
   }
 
   uint64_t random_seed = param_.random_seed() >= 0 ? static_cast<uint64_t>(param_.random_seed() +
@@ -232,12 +231,11 @@ void Solver::Step(int iters) {
   const bool test_and_snapshot_enabled = ts_epochs_remaining > 0;
   --ts_epochs_remaining;
 
-  vector<float> scores;
   const bool use_multi_gpu_testing = Caffe::device_in_use_per_host_count() > 1;
   const string mgpu_str = use_multi_gpu_testing ? "[MultiGPU] " : "";
   LOG_IF(INFO, rank_ == 0) << mgpu_str << "Initial Test started...";
   iteration_timer_->Start();
-  scores = TestAll(1, use_multi_gpu_testing);
+  vector<float> scores = TestAll(1, use_multi_gpu_testing);
   callback_soft_barrier();
   float lapse = iteration_timer_->Seconds();
   LOG_IF(INFO, rank_ == 0) << mgpu_str << "Initial Test completed in " << lapse << "s";
@@ -245,7 +243,7 @@ void Solver::Step(int iters) {
   unique_ptr<boost::thread> reduce_thread;
   if (net_->phase() == TRAIN) {
     reduce_thread.reset(
-        new boost::thread(&Solver::Reduce, this, callback(), Caffe::current_device(), mode,
+        new boost::thread(&Solver::Reduce, this, callback(), Caffe::device(), mode,
             random_seed, root_solver));
   }
 
@@ -317,7 +315,7 @@ void Solver::Step(int iters) {
 
     epoch_count = Caffe::epoch_count();
     if (epoch_count > 0UL) {
-      epochs = (double) (iters * param_.iter_size() * bps * Caffe::solver_count()) 
+      epochs = (double) (iters * param_.iter_size() * bps * Caffe::solver_count())
           / epoch_count;
       epochs_passed = (double) (iter() * param_.iter_size() * bps * Caffe::solver_count())
           / epoch_count;
