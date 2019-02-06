@@ -177,8 +177,8 @@ void caffe_gpu_amax<float16>(const int n, const float16* x, float* y, int group)
   const int n2 = even(n) / 2;
   gpu_amax_t(n2, reinterpret_cast<const half2*>(x), y, group);
 #ifdef DEBUG
-  CHECK(!isnan(*y));
-  CHECK(!isinf(*y));
+  CHECK(!std::isnan(*y));
+  CHECK(!std::isinf(*y));
 #endif
 }
 

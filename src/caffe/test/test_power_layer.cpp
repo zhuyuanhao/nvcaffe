@@ -46,10 +46,10 @@ class PowerLayerTest : public MultiDeviceTest<TypeParam> {
     for (int i = 0; i < this->blob_bottom_->count(); ++i) {
       Dtype expected_value = pow(shift + scale * bottom_data[i], power);
       if (power == Dtype(0) || power == Dtype(1) || power == Dtype(2)) {
-        EXPECT_FALSE(isnan(top_data[i]));
+        EXPECT_FALSE(std::isnan(top_data[i]));
       }
-      if (isnan(expected_value)) {
-        EXPECT_TRUE(isnan(top_data[i]));
+      if (std::isnan(expected_value)) {
+        EXPECT_TRUE(std::isnan(top_data[i]));
       } else {
         Dtype precision = std::max(Dtype(std::abs(expected_value * tol<Dtype>(1e-4, 1.e-2))),
             min_precision);

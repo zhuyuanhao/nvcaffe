@@ -189,7 +189,7 @@ std::string SyncedMemory::to_string(int indent, Type type) {  // debug helper
     os << idt << "First corrupted elements (if any):";
     int j = 0;
     for (size_t i = 0; i < size_ / sizeof(float) && j < MAX_ELEM_TO_SHOW; ++i) {
-      if (isinf(fdata[i]) || isnan(fdata[i])) {
+      if (std::isinf(fdata[i]) || std::isnan(fdata[i])) {
         os << idt << i << "->" << fdata[i] << " ";
         ++j;
       }
@@ -206,7 +206,7 @@ std::string SyncedMemory::to_string(int indent, Type type) {  // debug helper
     os << idt << "First corrupted elements (if any):";
     int j = 0;
     for (size_t i = 0; i < size_ / sizeof(float16) && j < MAX_ELEM_TO_SHOW; ++i) {
-      if (isinf(fdata[i]) || isnan(fdata[i])) {
+      if (std::isinf(fdata[i]) || std::isnan(fdata[i])) {
         os << i << "->" << float(fdata[i]) << " ";
         ++j;
       }

@@ -16,14 +16,14 @@ void LogLayer<Ftype, Btype>::LayerSetUp(const vector<Blob*>& bottom,
   // If base == -1, interpret the base as e and set log_base = 1 exactly.
   // Otherwise, calculate its log explicitly.
   const float log_base = (base == -1.F) ? 1.F : log(base);
-  CHECK(!isnan(log_base))
+  CHECK(!std::isnan(log_base))
       << "NaN result: log(base) = log(" << base << ") = " << log_base;
-  CHECK(!isinf(log_base))
+  CHECK(!std::isinf(log_base))
       << "Inf result: log(base) = log(" << base << ") = " << log_base;
   base_scale_ = 1.F / log_base;
-  CHECK(!isnan(base_scale_))
+  CHECK(!std::isnan(base_scale_))
       << "NaN result: 1/log(base) = 1/log(" << base << ") = " << base_scale_;
-  CHECK(!isinf(base_scale_))
+  CHECK(!std::isinf(base_scale_))
       << "Inf result: 1/log(base) = 1/log(" << base << ") = " << base_scale_;
   input_scale_ = this->layer_param_.log_param().scale();
   input_shift_ = this->layer_param_.log_param().shift();
