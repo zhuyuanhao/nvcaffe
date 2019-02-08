@@ -48,10 +48,6 @@ class InternalThread {
     return threads_.size();
   }
 
-  void resize_threads(size_t new_size) {
-    threads_.resize(new_size);
-  }
-
   void go() {
     for (shared_ptr<Flag>& flag : delay_flags_) {
       flag->set();
