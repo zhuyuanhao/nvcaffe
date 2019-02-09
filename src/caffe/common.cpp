@@ -50,7 +50,7 @@ Caffe& Caffe::Get() {
   // Make sure each thread can have different values.
   std::lock_guard<std::mutex> lock(caffe_mutex_);
   static thread_local Caffe caffe;
-  DCHECK_EQ(caffe.device(), current_device()) << " thread " << lwp_id();
+  DCHECK_EQ(caffe._device(), current_device()) << " thread " << lwp_id();
   return caffe;
 }
 
@@ -129,7 +129,8 @@ Caffe::Caffe()
       random_generator_(),
       is_root_solver_(true),
       device_(current_device()),
-      thread_id_(lwp_id()) {
+      thread_id_(lwp_id()),
+      gpu_memory_scope(Caffe::gpus_) {
   ++thread_count_;
   DLOG(INFO) << "[" << _device()
              << "] New Caffe instance " << this

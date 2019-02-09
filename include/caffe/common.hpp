@@ -358,6 +358,7 @@ class Caffe {
   caffe::GPUMemory::Workspace& _ws(size_t id) {
     return ws_[id];
   }
+  const GPUMemory::Scope gpu_memory_scope;
 
   DISABLE_COPY_MOVE_AND_ASSIGN(Caffe);
 
