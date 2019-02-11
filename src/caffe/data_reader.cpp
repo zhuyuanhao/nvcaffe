@@ -84,7 +84,6 @@ template<typename DatumType>
 void DataReader<DatumType>::InternalThreadEntryN(size_t thread_id) {
   if (cache_) {
     data_cache_->check_db(db_source_);
-    data_cache_->register_new_thread();
   }
 
   unique_ptr<db::DB> db;
@@ -156,8 +155,7 @@ shared_ptr<DatumType>& DataReader<DatumType>::DataCache::next_cached(DataReader&
   if (just_cached_.load()) {
     cache_bar_.wait();
     just_cached_.store(false);
-    LOG_FIRST_N(INFO, 1) << "Cached " << cache_buffer_.size() << " records by "
-          << cached_flags_.size() << " threads";
+    LOG_FIRST_N(INFO, 1) << "Cached " << cache_buffer_.size() << " records";
 //#ifdef DEBUG
 //    {
 //      std::lock_guard<std::mutex> lock(cache_mutex_);
@@ -189,7 +187,6 @@ shared_ptr<DatumType>& DataReader<DatumType>::DataCache::next_cached(DataReader&
 template<typename DatumType>
 void DataReader<DatumType>::DataCache::just_cached() {
   just_cached_.store(true);
-  cached_flags_[lwp_id()]->set();
 }
 
 template<typename DatumType>

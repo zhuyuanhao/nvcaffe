@@ -358,7 +358,7 @@ REGISTER_LAYER_CREATOR(Python, GetPythonLayer);
 void check_precision_support(Type& ftype, Type& btype, LayerParameter& param, bool transf) {
   if (!is_precise(ftype) || !is_precise(btype) || transf) {
     Type MT = tp<float>();
-    if (Caffe::is_main_thread()) {
+    if (Caffe::root_solver()) {
       if (transf) {
         LOG(WARNING) << "Layer '" << param.name() << "' of type '"
                      << param.type() << "' has transform settings not supported in "

@@ -152,7 +152,7 @@ struct GPUMemory {
     static const size_t MAX_CACHED_SIZE;  ///< 2^MAX_BIN
   };
 
-  static std::mutex ws_mutex_init_, dev_info_mutex_;
+  static std::mutex dev_info_mutex_;
   static Manager mgr_;
   static const int INVALID_DEVICE;  ///< Default is invalid: CUB takes care
 };

@@ -215,18 +215,15 @@ int train() {
     }
     LOG(INFO) << "Using GPUs " << s.str();
 
-    caffe::GPUMemory::Scope gpu_memory_scope(gpus);
-
     cudaDeviceProp device_prop;
     for (int i = 0; i < gpus.size(); ++i) {
       cudaGetDeviceProperties(&device_prop, gpus[i]);
       LOG(INFO) << "GPU " << gpus[i] << ": " << device_prop.name;
     }
-    CUDA_CHECK(cudaSetDevice(gpus[0]));
     Caffe::SetDevice(gpus[0]);
+    Caffe::set_gpus(gpus);
     solver_param.set_device_id(gpus[0]);
     Caffe::set_mode(Caffe::GPU);
-    Caffe::set_gpus(gpus);
     Caffe::set_solver_count(gpus.size() * caffe::P2PManager::global_count());
   }
 

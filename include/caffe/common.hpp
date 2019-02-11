@@ -136,10 +136,6 @@ class Caffe {
     shared_ptr<Generator> generator_;
   };
 
-  // Current thread
-  static std::uint32_t thread_id() {
-    return Get().thread_id_;
-  }
   // Getters for boost rng, curand, and cublas handles
   static RNG& rng_stream() {
     Caffe& c = Get();
@@ -279,12 +275,6 @@ class Caffe {
   static const std::string& cuda_driver_version() {
     return props().cuda_driver_version();
   }
-  static std::uint32_t main_thread_id() {
-    return props().main_thread_id();
-  }
-  static bool is_main_thread() {
-    return props().main_thread_id() == lwp_id();
-  }
   static std::string start_time() {
     return props().start_time();
   }
@@ -330,7 +320,6 @@ class Caffe {
   shared_ptr<RNG> random_generator_;
   bool is_root_solver_;
   const int device_;  // CUDA device where constructor was invoked
-  const std::uint32_t thread_id_;
 
   // Default device chosen by a user and associated with the main thread.
   // For example, if user runs `caffe train -gpu=1,0,3` then it has to be set to 1.
@@ -364,6 +353,7 @@ class Caffe {
   caffe::GPUMemory::Workspace& _ws(size_t id) {
     return ws_[id];
   }
+  const GPUMemory::Scope gpu_memory_scope_;
 
   DISABLE_COPY_MOVE_AND_ASSIGN(Caffe);
 
@@ -390,9 +380,6 @@ class Caffe {
     const std::string& cuda_driver_version() const {
       return cuda_driver_version_;
     }
-    std::uint32_t main_thread_id() const {
-      return main_thread_id_;
-    }
     std::string start_time() const {
       // NOLINT_NEXT_LINE(runtime/threadsafe_fn)
       return std::ctime(&init_time_);
@@ -406,7 +393,6 @@ class Caffe {
 
    private:
     std::time_t init_time_;
-    std::uint32_t main_thread_id_;
     std::string caffe_version_;
     std::string cudnn_version_;
     std::string cublas_version_;

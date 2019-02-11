@@ -50,7 +50,7 @@ Caffe& Caffe::Get() {
   // Make sure each thread can have different values.
   std::lock_guard<std::mutex> lock(caffe_mutex_);
   static thread_local Caffe caffe;
-  DCHECK_EQ(caffe.device(), current_device()) << " thread " << lwp_id();
+  DCHECK_EQ(caffe._device(), current_device()) << " thread " << lwp_id();
   return caffe;
 }
 
@@ -129,7 +129,7 @@ Caffe::Caffe()
       random_generator_(),
       is_root_solver_(true),
       device_(current_device()),
-      thread_id_(lwp_id()) {
+      gpu_memory_scope_(Caffe::gpus_) {
   ++thread_count_;
   DLOG(INFO) << "[" << _device()
              << "] New Caffe instance " << this
@@ -191,7 +191,7 @@ CudaStream::CudaStream(bool high_priority) {
     CUDA_CHECK(cudaStreamCreate(&stream_));
   }
   DLOG(INFO) << "New " << (high_priority ? "high priority " : "") << "stream "
-      << stream_ << ", device " << Caffe::device() << ", thread "
+      << stream_ << ", device " << Caffe::current_device() << ", thread "
       << lwp_id();
 }
 
@@ -455,7 +455,6 @@ Caffe::Properties& Caffe::props() {
 
 Caffe::Properties::Properties() :
       init_time_(std::time(nullptr)),
-      main_thread_id_(lwp_id()),
       caffe_version_(AS_STRING(CAFFE_VERSION)) {
   const std::vector<int>& gpus = Caffe::gpus();
   const int count = gpus.size();
