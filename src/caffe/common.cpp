@@ -129,8 +129,7 @@ Caffe::Caffe()
       random_generator_(),
       is_root_solver_(true),
       device_(current_device()),
-      thread_id_(lwp_id()),
-      gpu_memory_scope(Caffe::gpus_) {
+      gpu_memory_scope_(Caffe::gpus_) {
   ++thread_count_;
   DLOG(INFO) << "[" << _device()
              << "] New Caffe instance " << this

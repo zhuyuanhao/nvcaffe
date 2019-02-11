@@ -136,10 +136,6 @@ class Caffe {
     shared_ptr<Generator> generator_;
   };
 
-  // Current thread
-  static std::uint32_t thread_id() {
-    return Get().thread_id_;
-  }
   // Getters for boost rng, curand, and cublas handles
   static RNG& rng_stream() {
     Caffe& c = Get();
@@ -324,7 +320,6 @@ class Caffe {
   shared_ptr<RNG> random_generator_;
   bool is_root_solver_;
   const int device_;  // CUDA device where constructor was invoked
-  const std::uint32_t thread_id_;
 
   // Default device chosen by a user and associated with the main thread.
   // For example, if user runs `caffe train -gpu=1,0,3` then it has to be set to 1.
@@ -358,7 +353,7 @@ class Caffe {
   caffe::GPUMemory::Workspace& _ws(size_t id) {
     return ws_[id];
   }
-  const GPUMemory::Scope gpu_memory_scope;
+  const GPUMemory::Scope gpu_memory_scope_;
 
   DISABLE_COPY_MOVE_AND_ASSIGN(Caffe);
 
