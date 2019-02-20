@@ -556,7 +556,7 @@ template<typename Ftype, typename Btype>
 inline float Layer<Ftype, Btype>::Forward(const vector<Blob*>& bottom, const vector<Blob*>& top) {
   // Lock during forward to ensure sequential forward
   Lock();
-  float lloss = 0;
+  float lloss = 0.F;
   Reshape(bottom, top);
   switch (Caffe::mode()) {
     case Caffe::CPU:
