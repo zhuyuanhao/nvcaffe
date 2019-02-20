@@ -556,7 +556,7 @@ template<typename Ftype, typename Btype>
 inline float Layer<Ftype, Btype>::Forward(const vector<Blob*>& bottom, const vector<Blob*>& top) {
   // Lock during forward to ensure sequential forward
   Lock();
-  float loss = 0;
+  float lloss = 0;
   Reshape(bottom, top);
   switch (Caffe::mode()) {
     case Caffe::CPU:
@@ -566,7 +566,7 @@ inline float Layer<Ftype, Btype>::Forward(const vector<Blob*>& bottom, const vec
         const int count = top[top_id]->count();
         const Ftype* data = top[top_id]->cpu_data<Ftype>();
         const Ftype* loss_weights = top[top_id]->cpu_diff<Ftype>();
-        loss += caffe_cpu_dot(count, data, loss_weights);
+        lloss += caffe_cpu_dot(count, data, loss_weights);
       }
       break;
     case Caffe::GPU:
@@ -587,7 +587,7 @@ inline float Layer<Ftype, Btype>::Forward(const vector<Blob*>& bottom, const vec
 //                         << ", FT " << Type_Name(forward_type())
 //                         << " BT " << Type_Name(backward_type())
 //                  << " iter " << this->iter()
-//                         << " returned loss: " << loss
+//                         << " returned loss: " << lloss
 //                         << " count: " << count
 //                         << " blob_loss: " << blob_loss;
 //              return blob_loss;
@@ -599,14 +599,14 @@ inline float Layer<Ftype, Btype>::Forward(const vector<Blob*>& bottom, const vec
           const Ftype *loss_weights = top[top_id]->gpu_diff<Ftype>();
           caffe_gpu_dot(count, data, loss_weights, &blob_loss);
         }
-        loss += blob_loss;
+        lloss += blob_loss;
       }
       break;
     default:
       LOG(FATAL) << "Unknown caffe mode.";
   }
   Unlock();
-  return loss;
+  return lloss;
 }
 
 template<typename Ftype, typename Btype>
