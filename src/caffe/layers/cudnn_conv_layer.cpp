@@ -298,10 +298,8 @@ size_t CuDNNConvolutionLayer<Ftype, Btype>::AllocateWorkspace(size_t bottom_size
     if (this->phase_ == TRAIN) {
       mem_req(this->phase_, align_up<8>(workspace_bwd_data_sizes_[i]) * ws_groups());
       mem_req(this->phase_, align_up<8>(workspace_bwd_filter_sizes_[i]) * ws_groups());
-      mem_req(this->phase_, align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
-    } else {
-      mem_req(this->phase_, align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
     }
+    mem_req(this->phase_, align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
   }
   size_t req_bytes = mem_req(this->phase_);
   DLOG(INFO) << this->print_current_device()
