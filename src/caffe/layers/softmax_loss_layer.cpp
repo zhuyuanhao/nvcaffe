@@ -16,7 +16,11 @@ void SoftmaxWithLossLayer<Ftype, Btype>::LayerSetUp(
   LayerParameter softmax_param(this->layer_param_);
   softmax_param.set_type("Softmax");
 #ifdef USE_CUDNN
-  softmax_layer_.reset(new CuDNNSoftmaxLayer<Ftype, Btype>(softmax_param));
+  if (this->is_enforced_cpu()) {
+    softmax_layer_.reset(new SoftmaxLayer<Ftype, Btype>(softmax_param));
+  } else {
+    softmax_layer_.reset(new CuDNNSoftmaxLayer<Ftype, Btype>(softmax_param));
+  }
 #else
   softmax_layer_.reset(new SoftmaxLayer<Ftype, Btype>(softmax_param));
 #endif
@@ -24,6 +28,9 @@ void SoftmaxWithLossLayer<Ftype, Btype>::LayerSetUp(
   softmax_bottom_vec_.push_back(bottom[0]);
   softmax_top_vec_.clear();
   softmax_top_vec_.push_back(prob_.get());
+  if (this->is_enforced_cpu()) {
+    softmax_layer_->enforce_cpu();
+  }
   softmax_layer_->SetUp(softmax_bottom_vec_, softmax_top_vec_);
 
   has_ignore_label_ =
@@ -149,11 +156,10 @@ void SoftmaxWithLossLayer<Ftype, Btype>::Backward_cpu(const vector<Blob*>& top,
       }
     }
     // Scale gradient
-    Btype loss_weight = top[0]->cpu_diff<Btype>()[0] / get_normalizer(normalization_, count);
-    if (this->parent_net() != NULL) {
-      const float fp16_global_grad_scale = this->parent_net()->global_grad_scale();
-      loss_weight *= fp16_global_grad_scale;
-    }
+    Btype loss_weight = top[0]->cpu_diff<Btype>()[0];
+    const float global_grad_scale =
+        this->parent_net() == nullptr ? 1.F : this->parent_net()->global_grad_scale();
+    loss_weight = loss_weight * global_grad_scale / get_normalizer(normalization_, count);
     caffe_scal(prob_->count(), loss_weight, bottom_diff);
   }
 }

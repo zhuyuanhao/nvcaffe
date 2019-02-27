@@ -230,6 +230,7 @@ void Blob::CopyFrom(const Blob& source, bool copy_diff, bool reshape,
   }
   const shared_ptr<Tensor> &srct = copy_diff ? source.diff_tensor_ : source.data_tensor_;
   shared_ptr<Tensor> &dstt = copy_diff ? diff_tensor_ : data_tensor_;
+  CHECK_EQ(srct->count_, dstt->count_);
   const shared_ptr<SyncedMemory> &src = srct->synced_mem();
   shared_ptr<SyncedMemory> &dst = dstt->mutable_synced_mem();
   if (src->head() == SyncedMemory::UNINITIALIZED) {
@@ -249,7 +250,6 @@ void Blob::CopyFrom(const Blob& source, bool copy_diff, bool reshape,
     }
     do {
       if (src_type == dst_type) {
-        CHECK_EQ(srct->count_, dstt->count_);
         // cross copy
         if (srct->is_cpu_head() && dstt->is_gpu_head()) {
           cudaStream_t stream = Caffe::thread_stream(group);

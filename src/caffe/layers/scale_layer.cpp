@@ -54,6 +54,7 @@ void ScaleLayer<Ftype, Btype>::LayerSetUp(const vector<Blob*>& bottom,
     }
     bias_param->mutable_filler()->CopyFrom(param.bias_filler());
     bias_layer_ = LayerRegistry::CreateLayer(layer_param, this->parent_rank());
+    bias_layer_->enforce_cpu();
     bias_bottom_vec_.resize(1);
     bias_bottom_vec_[0] = bottom[0];
     bias_layer_->SetUp(bias_bottom_vec_, top);

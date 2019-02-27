@@ -2,6 +2,7 @@
 
 #include "caffe/layers/sigmoid_cross_entropy_loss_layer.hpp"
 #include "caffe/util/math_functions.hpp"
+#include "caffe/net.hpp"
 
 namespace caffe {
 
@@ -63,7 +64,9 @@ void SigmoidCrossEntropyLossLayer<Ftype, Btype>::Backward_cpu(
     caffe_sub(count, sigmoid_output_data, target, bottom_diff);
     // Scale down gradient
     const Btype loss_weight = top[0]->cpu_diff<Btype>()[0];
-    caffe_scal(count, Btype(loss_weight / num), bottom_diff);
+    const float global_grad_scale =
+        this->parent_net() == nullptr ? 1.F : this->parent_net()->global_grad_scale();
+    caffe_scal(count, Btype(loss_weight * global_grad_scale / num), bottom_diff);
   }
 }
 

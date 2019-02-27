@@ -475,7 +475,7 @@ vector<float> Solver::TestAll(const int iters, bool use_multi_gpu) {
        ++test_net_id) {
     vector<float> scores;
     if (param_.eval_type() == "detection") {
-      scores = TestDetection(test_net_id);
+      scores = TestDetection(test_net_id, iters);
     } else {
       scores = Test(test_net_id, iters, use_multi_gpu);
     }
@@ -588,7 +588,7 @@ vector<float> Solver::Test(const int test_net_id, const int iters, bool use_mult
   return scores;
 }
 
-vector<float>   Solver::TestDetection(const int test_net_id) {
+vector<float> Solver::TestDetection(const int test_net_id, const int iters) {
   typedef float Dtype;
   LOG_IF(INFO, rank_ == 0) << "Iteration " << iter_
             << ", Testing net (#" << test_net_id << ")";
@@ -601,7 +601,8 @@ vector<float>   Solver::TestDetection(const int test_net_id) {
   map<int, map<int, int> > all_num_pos;
   const shared_ptr<Net >& test_net = test_nets_[test_net_id];
   Dtype loss = 0;
-  for (int i = 0; i < param_.test_iter(test_net_id); ++i) {
+  const int test_iterations = iters > 0 ? iters : param_.test_iter(test_net_id);
+  for (int i = 0; i < test_iterations; ++i) {
     SolverAction::Enum request = GetRequestedAction();
     // Check to see if stoppage of testing/training has been requested.
     while (request != SolverAction::NONE) {

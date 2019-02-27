@@ -49,6 +49,7 @@ class LayerBase {
    */
   explicit LayerBase(const LayerParameter& param, int prec = 0)
       : layer_param_(param),
+        enforced_cpu_(false),
         debug_(false),
         fm_by_user_(false),
         bm_by_user_(false),
@@ -338,6 +339,14 @@ class LayerBase {
     _set_loss(top_index, value);
   }
 
+  bool is_enforced_cpu() const {
+    return enforced_cpu_;
+  }
+
+  void enforce_cpu() {
+    enforced_cpu_ = true;
+  }
+
   void fm_by_user(bool val) {
     fm_by_user_ = val;
   }
@@ -398,6 +407,7 @@ class LayerBase {
   /** The phase: TRAIN or TEST */
   Phase phase_;
 
+  bool enforced_cpu_;
   bool debug_;
   bool fm_by_user_, bm_by_user_;
   Net* parent_net_;
@@ -558,52 +568,42 @@ inline float Layer<Ftype, Btype>::Forward(const vector<Blob*>& bottom, const vec
   Lock();
   float lloss = 0.F;
   Reshape(bottom, top);
-  switch (Caffe::mode()) {
-    case Caffe::CPU:
-      Forward_cpu(bottom, top);
-      for (int top_id = 0; top_id < top.size(); ++top_id) {
-        if (this->loss(top_id) == 0.F) { continue; }
-        const int count = top[top_id]->count();
+  if (Caffe::mode() == Caffe::CPU || is_enforced_cpu()) {
+    Forward_cpu(bottom, top);
+    for (int top_id = 0; top_id < top.size(); ++top_id) {
+      if (this->loss(top_id) == 0.F) { continue; }
+      const int count = top[top_id]->count();
+      const Ftype* data = top[top_id]->cpu_data<Ftype>();
+      const Ftype* loss_weights = top[top_id]->cpu_diff<Ftype>();
+      lloss += caffe_cpu_dot(count, data, loss_weights);
+    }
+  } else {
+    Forward_gpu(bottom, top);
+    for (int top_id = 0; top_id < top.size(); ++top_id) {
+      if (this->loss(top_id) == 0.F) { continue; }
+      const int count = top[top_id]->count();
+      float blob_loss = 0.F;
+      if (count < 4) {
         const Ftype* data = top[top_id]->cpu_data<Ftype>();
         const Ftype* loss_weights = top[top_id]->cpu_diff<Ftype>();
-        lloss += caffe_cpu_dot(count, data, loss_weights);
-      }
-      break;
-    case Caffe::GPU:
-      Forward_gpu(bottom, top);
-      for (int top_id = 0; top_id < top.size(); ++top_id) {
-        if (this->loss(top_id) == 0.F) { continue; }
-        const int count = top[top_id]->count();
-        float blob_loss = 0.F;
-        if (count < 4) {
-          const Ftype* data = top[top_id]->cpu_data<Ftype>();
-          const Ftype* loss_weights = top[top_id]->cpu_diff<Ftype>();
-          for (int i = 0; i < count; ++i) {
-            blob_loss += (float)data[i] * (float)loss_weights[i];
-
-//            if (std::isnan(blob_loss)) {
-//              LOG(ERROR) << " ****** Forward CPU Layer '" << name()
-//                         << "' of type " << type()
-//                         << ", FT " << Type_Name(forward_type())
-//                         << " BT " << Type_Name(backward_type())
-//                  << " iter " << this->iter()
-//                         << " returned loss: " << lloss
-//                         << " count: " << count
-//                         << " blob_loss: " << blob_loss;
-//              return blob_loss;
-//            }
-//
-          }
-        } else {
-          const Ftype *data = top[top_id]->gpu_data<Ftype>();
-          const Ftype *loss_weights = top[top_id]->gpu_diff<Ftype>();
-          caffe_gpu_dot(count, data, loss_weights, &blob_loss);
+        for (int i = 0; i < count; ++i) {
+          blob_loss += (float) data[i] * (float) loss_weights[i];
+//          if (std::isnan(blob_loss) || std::isinf(blob_loss)) {
+//            LOG(ERROR) << " ****** Forward GPU Layer '" << name() << "' of type " << type()
+//                       << ", FT " << Type_Name(forward_type()) << " BT "
+//                       << Type_Name(backward_type()) << " iter " << this->iter()
+//                       << " returned loss: " << lloss << " count: " << count << " blob_loss: "
+//                       << blob_loss;
+//            return blob_loss;
+//          }
         }
-        lloss += blob_loss;
+      } else {
+        const Ftype* data = top[top_id]->gpu_data<Ftype>();
+        const Ftype* loss_weights = top[top_id]->gpu_diff<Ftype>();
+        caffe_gpu_dot(count, data, loss_weights, &blob_loss);
       }
-      break;
-    default:
-      LOG(FATAL) << "Unknown caffe mode.";
+      lloss += blob_loss;
+    }
   }
   Unlock();
   return lloss;
@@ -613,15 +613,10 @@ template<typename Ftype, typename Btype>
 inline void
 Layer<Ftype, Btype>::Backward(const vector<Blob*>& top, const vector<bool>& propagate_down,
     const vector<Blob*>& bottom) {
-  switch (Caffe::mode()) {
-    case Caffe::CPU:
-      Backward_cpu(top, propagate_down, bottom);
-      break;
-    case Caffe::GPU:
-      Backward_gpu(top, propagate_down, bottom);
-      break;
-    default:
-      LOG(FATAL) << "Unknown caffe mode.";
+  if (Caffe::mode() == Caffe::CPU || is_enforced_cpu()) {
+    Backward_cpu(top, propagate_down, bottom);
+  } else {
+    Backward_gpu(top, propagate_down, bottom);
   }
 }
 

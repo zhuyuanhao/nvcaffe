@@ -182,6 +182,7 @@ class DataReader : public InternalThread {
  private:
   int current_rec_;
   int current_queue_;
+  boost::barrier bar_;
   Flag start_reading_flag_;
   bool sample_only_;
   const bool cache_, shuffle_;

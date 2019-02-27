@@ -37,6 +37,7 @@ DataReader<DatumType>::DataReader(const LayerParameter& param,
       skip_one_batch_(skip_one_batch),
       current_rec_(0),
       current_queue_(0),
+      bar_(threads_num()),
       sample_only_(sample_only),
       cache_(cache && !sample_only),
       shuffle_(cache_ && shuffle),
@@ -107,6 +108,7 @@ void DataReader<DatumType>::InternalThreadEntryN(size_t thread_id) {
   cm.fetch(init_datum.get());
   init_->push(init_datum);
 
+  bar_.wait();
   if (!sample_only_) {
     start_reading_flag_.wait();
   }
@@ -141,6 +143,8 @@ void DataReader<DatumType>::InternalThreadEntryN(size_t thread_id) {
     }
   } catch (boost::thread_interrupted&) {
   }
+  bar_.wait();
+  start_reading_flag_.reset();
 }
 
 template<typename DatumType>

@@ -124,12 +124,10 @@ void CuDNNConvolutionLayer<Ftype, Btype>::LayerSetUp(
           CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM));
     bwd_data_algo_[i] = (cudnnConvolutionBwdDataAlgo_t)
         (user_algos_override_[1] >= 0 ? user_algos_override_[1] :
-         (use_dilation ? CUDNN_CONVOLUTION_BWD_DATA_ALGO_0 :
-          CUDNN_CONVOLUTION_BWD_DATA_ALGO_1));
+         CUDNN_CONVOLUTION_BWD_DATA_ALGO_1);
     bwd_filter_algo_[i] = (cudnnConvolutionBwdFilterAlgo_t)
         (user_algos_override_[2] >= 0 ? user_algos_override_[2] :
-         (use_dilation ? CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0 :
-          CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1));
+         CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1);
 
     workspace_fwd_sizes_[i] = 0;
     workspace_bwd_data_sizes_[i] = 0;
@@ -170,10 +168,6 @@ void CuDNNConvolutionLayer<Ftype, Btype>::LayerSetUp(
         kernel_h, kernel_w);
     this->weight_offset_ = (this->num_output_ / groups()) *
                            (this->channels_ / groups()) * kernel_h * kernel_w;
-  }
-
-  if (this->phase_ == TRAIN) {
-    mem_req(MEM_REQ_TMP_WEIGHTS, align_up<8>(this->weight_offset_ * tsize(tpmax<Btype, float>())));
   }
 
   // Create tensor descriptor(s) for data and corresponding convolution(s).
@@ -296,10 +290,11 @@ size_t CuDNNConvolutionLayer<Ftype, Btype>::AllocateWorkspace(size_t bottom_size
 
   for (int i = 0; i < bottom_size; ++i) {
     if (this->phase_ == TRAIN) {
-      mem_req(this->phase_, align_up<8>(workspace_bwd_data_sizes_[i]) * ws_groups());
-      mem_req(this->phase_, align_up<8>(workspace_bwd_filter_sizes_[i]) * ws_groups());
+      mem_req(this->phase_, align_up<21>(workspace_bwd_data_sizes_[i]) * ws_groups());
+      mem_req(this->phase_, align_up<21>(workspace_bwd_filter_sizes_[i]) * ws_groups());
     }
-    mem_req(this->phase_, align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
+    mem_req(this->phase_, align_up<21>(std::max<size_t>(1UL,
+        (workspace_fwd_sizes_[i]) * ws_groups())));
   }
   size_t req_bytes = mem_req(this->phase_);
   DLOG(INFO) << this->print_current_device()
@@ -423,6 +418,12 @@ void CuDNNConvolutionLayer<Ftype, Btype>::Reshape(
     cudnn::setTensor4dDesc<Btype>(&bwd_bias_desc_, 1,
         use_v7grouping() ? this->num_output_ : this->num_output_ / groups(),
         1, 1);
+  }
+
+  // per device
+  if (this->phase_ == TRAIN) {
+    mem_req(MEM_REQ_TMP_WEIGHTS,
+        align_up<21>(this->weight_offset_ * tsize(tpmax<Btype, float>())));
   }
 
   if (fwd_count_ == 0UL) {
@@ -568,6 +569,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
               Caffe::ws(CAFFE_WS_CONV).data(),
               gsize));
           CUDA_CHECK(cudaStreamSynchronize(stream));
+          CHECK_GT(fwd_algo_count, 0);
           // Waiting for two identical decisions in a row
           if (prev_algo == (int)fwd_results[0].algo) {
             break;
@@ -600,7 +602,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
             }
 #endif
             workspace_fwd_sizes_[i] = fwd_results[k].memory;
-            mem_req(this->phase_, align_up<8>(workspace_fwd_sizes_[i]) * ws_groups());
+            mem_req(this->phase_, align_up<21>(workspace_fwd_sizes_[i]) * ws_groups());
             fwd_pseudo = is_precise(forward_math_) && !is_precise(tp<Ftype>());
             break;
           }
@@ -662,6 +664,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
                 Caffe::ws(CAFFE_WS_CONV).data(),
                 gsize));
             CUDA_CHECK(cudaStreamSynchronize(stream));
+            CHECK_GT(filter_algo_count, 0);
             // Waiting for two identical decisions in a row
             if (prev_algo == (int)bwd_filter_results[0].algo) {
               break;
@@ -694,7 +697,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
               }
 #endif
               workspace_bwd_filter_sizes_[i] = bwd_filter_results[k].memory;
-              mem_req(TRAIN, align_up<8>(workspace_bwd_filter_sizes_[i]) * ws_groups());
+              mem_req(TRAIN, align_up<21>(workspace_bwd_filter_sizes_[i]) * ws_groups());
               bwd_filter_pseudo = is_precise(backward_filter_math_) && !is_precise(tp<Btype>());
               bftime = bwd_filter_results[k].time;
               break;
@@ -754,6 +757,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
                   Caffe::ws(CAFFE_WS_CONV).data(),
                   gsize));
               CUDA_CHECK(cudaStreamSynchronize(stream));
+              CHECK_GT(data_algo_count, 0);
               // Waiting for two identical decisions in a row
               if (prev_algo == (int) bwd_data_results[0].algo) {
                 break;
@@ -786,7 +790,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
                 }
 #endif
                 workspace_bwd_data_sizes_[i] = bwd_data_results[k].memory;
-                mem_req(TRAIN, align_up<8>(workspace_bwd_data_sizes_[i]) * ws_groups());
+                mem_req(TRAIN, align_up<21>(workspace_bwd_data_sizes_[i]) * ws_groups());
                 bwd_data_pseudo = is_precise(backward_data_math_) && !is_precise(tp<Btype>());
                 bdtime = bwd_data_results[k].time;
                 break;
@@ -808,6 +812,7 @@ void CuDNNConvolutionLayer<Ftype, Btype>::FindExConvAlgo(
         << Caffe::ws(CAFFE_WS_CONV).size() << " bytes";
     Caffe::ws(CAFFE_WS_CONV).release();
     AllocateWorkspace(bottom.size());  // if user overrides
+    Caffe::ws(CAFFE_WS_CONV_WEIGHTS).release();
 
     size_t available_memory, total_memory;
     GPUMemory::GetInfo(&available_memory, &total_memory, true);
