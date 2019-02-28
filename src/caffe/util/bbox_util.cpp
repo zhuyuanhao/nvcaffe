@@ -1065,10 +1065,9 @@ void GetGroundTruth(const Dtype* gt_data, const int num_gt,
     if (item_id == -1) {
       continue;
     }
-    int label = gt_data[start_idx + 1];
-    if (is_precise<Dtype>()) {
-      CHECK_NE(background_label_id, label) << "Found background label in the dataset.";
-    } else if (background_label_id == label) {
+    int label = std::round(gt_data[start_idx + 1]);
+    if (label <= background_label_id) {
+      DLOG(WARNING) << "Ignoring background label in the dataset: " << gt_data[start_idx + 1];
       continue;
     }
     bool difficult = static_cast<bool>(gt_data[start_idx + 7]);
@@ -1112,9 +1111,11 @@ void GetGroundTruth(const Dtype* gt_data, const int num_gt,
       break;
     }
     NormalizedBBox bbox;
-    int label = gt_data[start_idx + 1];
-    CHECK_NE(background_label_id, label)
-        << "Found background label in the dataset.";
+    int label = std::round(gt_data[start_idx + 1]);
+    if (label <= background_label_id) {
+      DLOG(WARNING) << "Ignoring background label in the dataset: " << gt_data[start_idx + 1];
+      continue;
+    }
     bool difficult = static_cast<bool>(gt_data[start_idx + 7]);
     if (!use_difficult_gt && difficult) {
       // Skip reading difficult ground truth.
