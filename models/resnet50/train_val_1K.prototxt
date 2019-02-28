@@ -1,4 +1,5 @@
 name: "Resnet50_fp16"
+eltwise_mem_sharing: true
 
 default_forward_type:  FLOAT16
 default_backward_type: FLOAT16

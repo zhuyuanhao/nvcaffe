@@ -12,6 +12,8 @@
 #include <boost/filesystem.hpp>
 #include <boost/foreach.hpp>
 
+#ifndef CAFFE_NO_BOOST_PROPERTY_TREE
+
 namespace caffe {
 
 template <typename Ftype, typename Btype>
@@ -304,3 +306,5 @@ void DetectionOutputLayer<Ftype, Btype>::Forward_gpu(
 INSTANTIATE_LAYER_GPU_FUNCS_FB(DetectionOutputLayer);
 
 }  // namespace caffe
+
+#endif  // !CAFFE_NO_BOOST_PROPERTY_TREE

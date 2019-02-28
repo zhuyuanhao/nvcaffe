@@ -35,7 +35,7 @@ void BatchTransformer<Ftype, Btype>::resize(bool skip_to_next) {
     // prefetch is Btype (cpu transform) or Ftype (gpu_transform_), processed is Ftype
     shared_ptr<Batch> batch = gpu_transform_ ?
                               make_shared<Batch>(tp<Ftype>(), tp<Ftype>()) :
-                              make_shared<Batch>(tp<Btype>(), tp<Btype>());
+                              make_shared<Batch>(tp<Ftype>(), tp<Btype>());
     prefetch_.push_back(batch);
     prefetches_free_[i] = make_shared<BlockingQueue<shared_ptr<Batch>>>();
     prefetches_full_[i] = make_shared<BlockingQueue<shared_ptr<Batch>>>();
@@ -48,6 +48,7 @@ void BatchTransformer<Ftype, Btype>::resize(bool skip_to_next) {
 
 template<typename Ftype, typename Btype>
 void BatchTransformer<Ftype, Btype>::InternalThreadEntry() {
+  LOG(INFO) << "Started BatchTransformer thread " << lwp_id();
   try {
     while (!must_stop(0)) {
       shared_ptr<Batch> batch =

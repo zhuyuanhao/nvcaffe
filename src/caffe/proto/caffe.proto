@@ -323,8 +323,9 @@ message NetParameter {
   // "Smart" memory sharing for EltwiseLayer.
   // Boosts performance by reducing memory consumption and copying.
   // Some models (like ResNet) are ok with this mode.
-  // Some models are not ok. Test carefully before using.
-  optional bool eltwise_mem_sharing = 20 [default = false];
+  // Some rare models are not ok. Test carefully before using.
+  // Set to true by default in order to maintain current behavior
+  optional bool eltwise_mem_sharing = 20 [default = true];
 }
 
 // NOTE

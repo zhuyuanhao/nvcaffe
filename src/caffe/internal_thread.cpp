@@ -75,7 +75,7 @@ void InternalThread::entry(int thread_id, int device, Caffe::Brew mode, uint64_t
   Caffe::set_mode(mode);
   Caffe::set_random_seed(random_seed);
 
-  DLOG(INFO) << "Started internal thread " << lwp_id()
+  LOG(INFO) << "Started internal thread " << lwp_id()
             << " on device " << device << ", rank " << rank_;
   if (mode == Caffe::GPU && set_cpu_affinity) {
 #ifndef NO_NVML

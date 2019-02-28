@@ -77,6 +77,8 @@ void MultiBoxLossLayer<Ftype, Btype>::LayerSetUp(const vector<Blob*>& bottom,
     layer_param.set_type("EuclideanLoss");
     layer_param.add_loss_weight(loc_weight_);
     loc_loss_layer_ = LayerRegistry::CreateLayer(layer_param, this->parent_rank());
+    loc_loss_layer_->enforce_cpu();
+    loc_loss_layer_->set_parent_net(this->parent_net());
     loc_loss_layer_->SetUp(loc_bottom_vec_, loc_top_vec_);
   } else if (loc_loss_type_ == MultiBoxLossParameter_LocLossType_SMOOTH_L1) {
     LayerParameter layer_param;
@@ -84,6 +86,8 @@ void MultiBoxLossLayer<Ftype, Btype>::LayerSetUp(const vector<Blob*>& bottom,
     layer_param.set_type("SmoothL1Loss");
     layer_param.add_loss_weight(loc_weight_);
     loc_loss_layer_ = LayerRegistry::CreateLayer(layer_param, this->parent_rank());
+    loc_loss_layer_->enforce_cpu();
+    loc_loss_layer_->set_parent_net(this->parent_net());
     loc_loss_layer_->SetUp(loc_bottom_vec_, loc_top_vec_);
   } else {
     LOG(FATAL) << "Unknown localization loss type.";
@@ -116,6 +120,8 @@ void MultiBoxLossLayer<Ftype, Btype>::LayerSetUp(const vector<Blob*>& bottom,
     conf_bottom_vec_.push_back(conf_pred_.get());
     conf_bottom_vec_.push_back(conf_gt_.get());
     conf_loss_layer_ = LayerRegistry::CreateLayer(layer_param, this->parent_rank());
+    conf_loss_layer_->enforce_cpu();
+    conf_loss_layer_->set_parent_net(this->parent_net());
     conf_loss_layer_->SetUp(conf_bottom_vec_, conf_top_vec_);
   } else if (conf_loss_type_ == MultiBoxLossParameter_ConfLossType_LOGISTIC) {
     LayerParameter layer_param;
@@ -130,6 +136,8 @@ void MultiBoxLossLayer<Ftype, Btype>::LayerSetUp(const vector<Blob*>& bottom,
     conf_bottom_vec_.push_back(conf_pred_.get());
     conf_bottom_vec_.push_back(conf_gt_.get());
     conf_loss_layer_ = LayerRegistry::CreateLayer(layer_param, this->parent_rank());
+    conf_loss_layer_->enforce_cpu();
+    conf_loss_layer_->set_parent_net(this->parent_net());
     conf_loss_layer_->SetUp(conf_bottom_vec_, conf_top_vec_);
   } else {
     LOG(FATAL) << "Unknown confidence loss type.";
@@ -163,7 +171,7 @@ void MultiBoxLossLayer<Ftype, Btype>::Forward_cpu(const vector<Blob*>& bottom,
 
   // Retrieve all ground truth.
   map<int, vector<NormalizedBBox> > all_gt_bboxes;
-  GetGroundTruth(gt_data, num_classes_, num_gt_, background_label_id_, use_difficult_gt_,
+  GetGroundTruth(gt_data, num_gt_, background_label_id_, use_difficult_gt_,
                  &all_gt_bboxes);
 
   // Retrieve all prior bboxes. It is same within a batch since we assume all
@@ -250,17 +258,17 @@ void MultiBoxLossLayer<Ftype, Btype>::Forward_cpu(const vector<Blob*>& bottom,
     conf_loss_->mutable_cpu_data<Dtype>()[0] = 0;
   }
 
-  top[0]->mutable_cpu_data<Dtype>()[0] = 0;
+  Dtype *t0 = top[0]->mutable_cpu_data<Dtype>();
+  t0[0] = 0;
   if (this->layer_param_.propagate_down(0)) {
     Dtype normalizer = LossLayer<Ftype, Btype>::GetNormalizer(
         normalization_, num_, num_priors_, num_matches_);
-    top[0]->mutable_cpu_data<Dtype>()[0] +=
-        loc_weight_ * loc_loss_->cpu_data<Dtype>()[0] / normalizer;
+    t0[0] += loc_weight_ * loc_loss_->cpu_data<Dtype>()[0] / normalizer;
   }
   if (this->layer_param_.propagate_down(1)) {
     Dtype normalizer = LossLayer<Ftype, Btype>::GetNormalizer(
         normalization_, num_, num_priors_, num_matches_);
-    top[0]->mutable_cpu_data<Dtype>()[0] += conf_loss_->cpu_data<Dtype>()[0] / normalizer;
+    t0[0] += conf_loss_->cpu_data<Dtype>()[0] / normalizer;
   }
 }
 
@@ -293,9 +301,6 @@ void MultiBoxLossLayer<Ftype, Btype>::Backward_cpu(const vector<Blob*>& top,
       Dtype normalizer = LossLayer<Ftype, Btype>::GetNormalizer(
           normalization_, num_, num_priors_, num_matches_);
       Dtype loss_weight = top[0]->cpu_diff<Dtype>()[0] / normalizer;
-      if (this->parent_net() != NULL) {
-        loss_weight *= this->parent_net()->global_grad_scale();
-      }
       caffe_scal(loc_pred_->count(), loss_weight, loc_pred_->mutable_cpu_diff<Dtype>());
       // Copy gradient back to bottom[0].
       const Dtype* loc_pred_diff = loc_pred_->cpu_diff<Dtype>();
@@ -337,9 +342,6 @@ void MultiBoxLossLayer<Ftype, Btype>::Backward_cpu(const vector<Blob*>& top,
       Dtype normalizer = LossLayer<Ftype, Btype>::GetNormalizer(
           normalization_, num_, num_priors_, num_matches_);
       Dtype loss_weight = top[0]->cpu_diff<Dtype>()[0] / normalizer;
-      if (this->parent_net() != NULL) {
-        loss_weight *= this->parent_net()->global_grad_scale();
-      }
       caffe_scal(conf_pred_->count(), loss_weight,
                  conf_pred_->mutable_cpu_diff<Dtype>());
       // Copy gradient back to bottom[1].
@@ -369,8 +371,8 @@ void MultiBoxLossLayer<Ftype, Btype>::Backward_cpu(const vector<Blob*>& top,
             int j = all_neg_indices_[i][n];
             CHECK_LT(j, num_priors_);
             caffe_copy(num_classes_,
-                              conf_pred_diff + count * num_classes_,
-                              conf_bottom_diff + j * num_classes_);
+                       conf_pred_diff + count * num_classes_,
+                       conf_bottom_diff + j * num_classes_);
             ++count;
           }
           conf_bottom_diff += bottom[1]->offset(1);

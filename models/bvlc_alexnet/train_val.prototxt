@@ -12,11 +12,11 @@ layer {
   }
   data_param {
     source: "examples/imagenet/ilsvrc12_train_lmdb"
-    batch_size: 1024
+    batch_size: 512
 #    source: "/data/imagenet/train-lmdb-uncompressed-256x256"
 #    batch_size: 8192
-    cache: true
-    shuffle: true
+#    cache: true
+#    shuffle: true
     backend: LMDB
   }
   include { phase: TRAIN }

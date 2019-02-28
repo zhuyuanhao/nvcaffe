@@ -67,8 +67,10 @@ class DetectionOutputLayer : public Layer<Ftype, Btype> {
    */
   virtual void Forward_cpu(const vector<Blob*>& bottom,
       const vector<Blob*>& top);
+#ifndef CAFFE_NO_BOOST_PROPERTY_TREE
   virtual void Forward_gpu(const vector<Blob*>& bottom,
       const vector<Blob*>& top);
+#endif
   /// @brief Not implemented
   virtual void Backward_cpu(const vector<Blob*>& top,
       const vector<bool>& propagate_down, const vector<Blob*>& bottom) {

@@ -166,7 +166,6 @@ DataLayer<Ftype, Btype>::DataLayerSetUp(const vector<Blob*>& bottom, const vecto
         cache,
         shuffle,
         this->phase_ == TRAIN);
-    start_reading();
   }
   // Read a data point, and use it to initialize the top blob.
   shared_ptr<Datum> sample_datum = sample_only_ ? sample_reader_->sample() : reader_->sample();

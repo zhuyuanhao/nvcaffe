@@ -21,6 +21,7 @@ template <typename Ftype, typename Btype>
 class AnnotatedDataLayer : public DataLayer<Ftype, Btype> {
  public:
   AnnotatedDataLayer(const LayerParameter& param, size_t solver_rank);
+  ~AnnotatedDataLayer();
   void DataLayerSetUp(const vector<Blob*>& bottom, const vector<Blob*>& top) override;
 
   const char* type() const override {
