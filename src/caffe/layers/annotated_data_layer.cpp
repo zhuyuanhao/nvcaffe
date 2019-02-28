@@ -19,6 +19,11 @@ AnnotatedDataLayer<Ftype, Btype>::AnnotatedDataLayer(const LayerParameter& param
   : DataLayer<Ftype, Btype>(param, solver_rank) {}
 
 template <typename Ftype, typename Btype>
+AnnotatedDataLayer<Ftype, Btype>::~AnnotatedDataLayer() {
+  this->StopInternalThread();
+}
+
+template <typename Ftype, typename Btype>
 void AnnotatedDataLayer<Ftype, Btype>::DataLayerSetUp(
     const vector<Blob*>& bottom, const vector<Blob*>& top) {
   const LayerParameter& param = this->layer_param();

@@ -18,7 +18,7 @@
 #endif
 #endif
 
-// Ubuntu 18.04 fails to build boost::property_tree
+// Ubuntu 18.04 fails to build boost::property_tree by NVCC 10.1
 #if BOOST_VERSION == 106501 && CUDA_VERSION == 10010
 #define CAFFE_NO_BOOST_PROPERTY_TREE 1
 #endif
