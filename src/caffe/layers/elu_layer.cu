@@ -9,8 +9,8 @@ template <typename Dtype>
 __global__ void ELUForward(const int n, const Dtype* in, Dtype* out,
     float alpha, float lambda) {
   CUDA_KERNEL_LOOP(index, n) {
-    out[index] = lambda * in[index] > 0 ? in[index] :
-        Dtype(alpha * (exp(in[index]) - 1.));
+    out[index] = lambda * (in[index] > 0 ? in[index] :
+        Dtype(alpha * (exp(in[index]) - 1.)));
   }
 }
 
@@ -33,8 +33,8 @@ __global__ void ELUBackward(const int n, const Dtype* in_diff,
     const Dtype* out_data, const Dtype* in_data, Dtype* out_diff,
     float alpha, float lambda) {
   CUDA_KERNEL_LOOP(index, n) {
-    out_diff[index] = lambda * in_data[index] > 0 ? in_diff[index] :
-        Dtype(in_diff[index] * (out_data[index] + alpha));
+    out_diff[index] = lambda * (in_data[index] > 0 ? in_diff[index] :
+        Dtype(in_diff[index] * (out_data[index] + alpha)));
   }
 }
 

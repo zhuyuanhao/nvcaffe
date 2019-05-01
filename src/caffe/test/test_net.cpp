@@ -1395,7 +1395,7 @@ TYPED_TEST(NetTest, TestSharedWeightsUpdate) {
     } else {
       EXPECT_NEAR(ip1_weights->cpu_diff<Dtype>()[i] +
           ip2_weights->cpu_diff<Dtype>()[i],
-          shared_params.cpu_diff()[i], 2.);
+          shared_params.cpu_diff()[i], 3.);
     }
   }
   caffe_axpy<Dtype>(count, Dtype(-1), ip1_weights->cpu_diff<Dtype>(),
