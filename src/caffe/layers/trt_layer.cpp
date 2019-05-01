@@ -28,7 +28,7 @@ class TRTLogger : public nvinfer1::ILogger {
       case Severity::kWARNING:
         LOG(WARNING) << msg;
         break;
-      case Severity::kINFO:
+      default:
         LOG(INFO) << msg;
         break;
     }

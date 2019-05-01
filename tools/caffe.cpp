@@ -21,11 +21,7 @@ using caffe::Caffe;
 using caffe::Net;
 using caffe::LayerBase;
 using caffe::Solver;
-using caffe::shared_ptr;
-using caffe::string;
 using caffe::Timer;
-using caffe::vector;
-using std::ostringstream;
 
 DEFINE_string(gpu, "",
     "Optional; run in GPU mode on given device IDs separated by ', '."
@@ -62,7 +58,7 @@ DEFINE_bool(show_per_class_result, true,
 
 // A simple registry for caffe commands.
 typedef int (*BrewFunction)();
-typedef std::map<caffe::string, BrewFunction> BrewMap;
+typedef std::map<std::string, BrewFunction> BrewMap;
 BrewMap g_brew_map;
 
 #define RegisterBrewFunction(func) \
@@ -76,7 +72,7 @@ class __Registerer_##func { \
 __Registerer_##func g_registerer_##func; \
 }
 
-static BrewFunction GetBrewFunction(const caffe::string& name) {
+static BrewFunction GetBrewFunction(const string& name) {
   if (g_brew_map.count(name)) {
     return g_brew_map[name];
   } else {
@@ -219,18 +215,15 @@ int train() {
     }
     LOG(INFO) << "Using GPUs " << s.str();
 
-    caffe::GPUMemory::Scope gpu_memory_scope(gpus);
-
     cudaDeviceProp device_prop;
     for (int i = 0; i < gpus.size(); ++i) {
       cudaGetDeviceProperties(&device_prop, gpus[i]);
       LOG(INFO) << "GPU " << gpus[i] << ": " << device_prop.name;
     }
-    CUDA_CHECK(cudaSetDevice(gpus[0]));
     Caffe::SetDevice(gpus[0]);
+    Caffe::set_gpus(gpus);
     solver_param.set_device_id(gpus[0]);
     Caffe::set_mode(Caffe::GPU);
-    Caffe::set_gpus(gpus);
     Caffe::set_solver_count(gpus.size() * caffe::P2PManager::global_count());
   }
 
@@ -651,7 +644,7 @@ int time() {
   }
   LOG(INFO) << "Average time per layer: ";
   for (int i = 0; i < layers.size(); ++i) {
-    const caffe::string& layername = layers[i]->layer_param().name();
+    const std::string& layername = layers[i]->layer_param().name();
     LOG(INFO) << std::setfill(' ') << std::setw(10) << layername <<
       "\tforward: " << forward_time_per_layer[i] / 1000. /
       FLAGS_iterations << " ms.";
@@ -724,7 +717,7 @@ int main(int argc, char** argv) {
         (void)mainPyThread;
       }
 #endif
-      return GetBrewFunction(caffe::string(argv[1]))();
+      return GetBrewFunction(std::string(argv[1]))();
 #ifdef WITH_PYTHON_LAYER
     } catch (bp::error_already_set&) {
       PyErr_Print();

@@ -319,6 +319,13 @@ message NetParameter {
 
   // Sets the default "cudnn_math_override" value for every layer
   optional int32 default_cudnn_math_override = 19 [default = -1];
+
+  // "Smart" memory sharing for EltwiseLayer.
+  // Boosts performance by reducing memory consumption and copying.
+  // Some models (like ResNet) are ok with this mode.
+  // Some rare models are not ok. Test carefully before using.
+  // Set to true by default in order to maintain current behavior
+  optional bool eltwise_mem_sharing = 20 [default = true];
 }
 
 // NOTE

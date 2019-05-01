@@ -12,7 +12,6 @@ template<typename Ftype, typename Btype>
 void CuDNNConvolutionLayer<Ftype, Btype>::Forward_gpu(const vector<Blob*>& bottom,
     const vector<Blob*>& top) {
   const Ftype* weight = this->blobs_[0]->template gpu_data<Ftype>();
-  GPUMemory::Workspace* ws = GPUMemory::workspace_[Caffe::current_device()].get();
   if (use_v7grouping()) {
     for (int i = 0; i < bottom.size(); ++i) {
       const Ftype *bottom_data = bottom[i]->gpu_data<Ftype>();
@@ -21,7 +20,8 @@ void CuDNNConvolutionLayer<Ftype, Btype>::Forward_gpu(const vector<Blob*>& botto
       CUDNN_CHECK(cudnnConvolutionForward(Caffe::cudnn_handle(0),
           cudnn::dataType<Ftype>::one, fwd_bottom_descs_[i], bottom_data,
           fwd_filter_desc_, weight,
-          fwd_conv_descs_[i], fwd_algo_[i], ws->data(), ws->size(),
+          fwd_conv_descs_[i], fwd_algo_[i],
+          Caffe::ws(CAFFE_WS_CONV).data(), Caffe::ws(CAFFE_WS_CONV).size(),
           cudnn::dataType<Ftype>::zero, fwd_top_descs_[i], top_data));
       if (this->bias_term_) {
         const Ftype *bias_data = this->blobs_[1]->template gpu_data<Ftype>();
@@ -39,10 +39,11 @@ void CuDNNConvolutionLayer<Ftype, Btype>::Forward_gpu(const vector<Blob*>& botto
       const Ftype* bottom_data = bottom[i]->gpu_data<Ftype>();
       Ftype* top_data = top[i]->mutable_gpu_data<Ftype>();
       // Forward through cuDNN in parallel over groups.
-      const size_t gsize = ws->size() / ws_groups();
+      const size_t gsize = Caffe::ws(CAFFE_WS_CONV).size() / ws_groups();
       CHECK(is_even(gsize));
       for (int g = 0; g < groups(); ++g) {
-        void* pspace = static_cast<unsigned char*>(ws->data()) + gsize * idxg(g);
+        void* pspace = static_cast<unsigned char*>(Caffe::ws(CAFFE_WS_CONV).data())
+            + gsize * idxg(g);
         // Filters.
         CUDNN_CHECK(cudnnConvolutionForward(Caffe::cudnn_handle(idxg(g)),
             cudnn::dataType<Ftype>::one, fwd_bottom_descs_[i], bottom_data + bottom_offset_ * g,
@@ -80,7 +81,6 @@ template <typename Ftype, typename Btype>
 void CuDNNConvolutionLayer<Ftype, Btype>::Backward_gpu(const vector<Blob*>& top,
     const vector<bool>& propagate_down, const vector<Blob*>& bottom) {
   propagate_down_ = propagate_down;
-  GPUMemory::Workspace* ws = GPUMemory::workspace_[Caffe::current_device()].get();
   if (use_v7grouping()) {
     // compute dE/dB = sum_c(dE/dy)
     if (this->bias_term_ && this->param_propagate_down_[1]) {
@@ -103,10 +103,18 @@ void CuDNNConvolutionLayer<Ftype, Btype>::Backward_gpu(const vector<Blob*>& top,
         const Btype *bottom_data = bottom[i]->gpu_data<Btype>();
         // Gradient w.r.t. weights.
         CUDNN_CHECK(cudnnConvolutionBackwardFilter(Caffe::cudnn_handle(0),
-            cudnn::dataType<Btype>::one, bwd_bottom_descs_[i], bottom_data,
-            bwd_top_descs_[i], top_diff,
-            bwd_conv_filter_descs_[i], bwd_filter_algo_[i], ws->data(), ws->size(),
-            cudnn::dataType<Btype>::one, bwd_filter_desc_, weight_diff));
+            cudnn::dataType<Btype>::one,
+            bwd_bottom_descs_[i],
+            bottom_data,
+            bwd_top_descs_[i],
+            top_diff,
+            bwd_conv_filter_descs_[i],
+            bwd_filter_algo_[i],
+            Caffe::ws(CAFFE_WS_CONV).data(),
+            Caffe::ws(CAFFE_WS_CONV).size(),
+            cudnn::dataType<Btype>::one,
+            bwd_filter_desc_,
+            weight_diff));
         CUDA_CHECK(cudaStreamSynchronize(Caffe::thread_stream(0)));
       }  // end of i
     }
@@ -118,17 +126,24 @@ void CuDNNConvolutionLayer<Ftype, Btype>::Backward_gpu(const vector<Blob*>& top,
         Btype *top_diff = top[i]->mutable_gpu_diff<Btype>();
         Btype *bottom_diff = bottom[i]->mutable_gpu_diff<Btype>();
         CUDNN_CHECK(cudnnConvolutionBackwardData(Caffe::cudnn_handle(0),
-            cudnn::dataType<Btype>::one, bwd_filter_desc_, weight,
-            bwd_top_descs_[i], top_diff,
+            cudnn::dataType<Btype>::one,
+            bwd_filter_desc_,
+            weight,
+            bwd_top_descs_[i],
+            top_diff,
             bwd_conv_data_descs_[i],
-            bwd_data_algo_[i], ws->data(), ws->size(),
-            cudnn::dataType<Btype>::zero, bwd_bottom_descs_[i], bottom_diff));
+            bwd_data_algo_[i],
+            Caffe::ws(CAFFE_WS_CONV).data(),
+            Caffe::ws(CAFFE_WS_CONV).size(),
+            cudnn::dataType<Btype>::zero,
+            bwd_bottom_descs_[i],
+            bottom_diff));
         CUDA_CHECK(cudaStreamSynchronize(Caffe::thread_stream(0)));
       }  // end if propagate down
     }  // end for i
   } else {
     // "old" path
-    const size_t gsize = ws->size() / ws_groups();
+    const size_t gsize = Caffe::ws(CAFFE_WS_CONV).size() / ws_groups();
     // compute dE/dB = sum_c(dE/dy)
     if (this->bias_term_ && this->param_propagate_down_[1]) {
       Btype* bias_diff = this->blobs_[1]->template mutable_gpu_diff<Btype>();
@@ -156,15 +171,20 @@ void CuDNNConvolutionLayer<Ftype, Btype>::Backward_gpu(const vector<Blob*>& top,
         const Btype* bottom_data = bottom[i]->gpu_data<Btype>();
         // Backward through cuDNN in parallel over groups and gradients.
         for (int g = 0; g < groups(); ++g) {
-          unsigned char* pspace = static_cast<unsigned char*>(ws->data()) + gsize * idxg(g);
+          unsigned char* pspace = static_cast<unsigned char*>(Caffe::ws(CAFFE_WS_CONV).data())
+              + gsize * idxg(g);
           // Gradient w.r.t. weights.
           CUDNN_CHECK(cudnnConvolutionBackwardFilter(Caffe::cudnn_handle(idxg(g)),
               cudnn::dataType<Btype>::one,
-              bwd_bottom_descs_[i], bottom_data + bottom_offset_ * g,
-              bwd_top_descs_[i], top_diff + top_offset_ * g,
-              bwd_conv_filter_descs_[i], bwd_filter_algo_[i], pspace, gsize,
+              bwd_bottom_descs_[i],
+              bottom_data + bottom_offset_ * g,
+              bwd_top_descs_[i],
+              top_diff + top_offset_ * g,
+              bwd_conv_filter_descs_[i],
+              bwd_filter_algo_[i], pspace, gsize,
               cudnn::dataType<Btype>::one,
-              bwd_filter_desc_, weight_diff + this->weight_offset_ * g));
+              bwd_filter_desc_,
+              weight_diff + this->weight_offset_ * g));
         }  // end of groups
         // Synchronize the work across groups, each of which went into its own stream
         // NOLINT_NEXT_LINE(whitespace/operators)
@@ -182,15 +202,21 @@ void CuDNNConvolutionLayer<Ftype, Btype>::Backward_gpu(const vector<Blob*>& top,
         for (int g = 0; g < groups(); ++g) {
           Btype* top_diff = top[i]->mutable_gpu_diff<Btype>();
           Btype* bottom_diff = bottom[i]->mutable_gpu_diff<Btype>();
-          unsigned char* pspace = static_cast<unsigned char*>(ws->data()) + gsize * idxg(g);
+          unsigned char* pspace = static_cast<unsigned char*>(Caffe::ws(CAFFE_WS_CONV).data())
+              + gsize * idxg(g);
           CUDNN_CHECK(cudnnConvolutionBackwardData(Caffe::cudnn_handle(idxg(g)),
               cudnn::dataType<Btype>::one,
-              bwd_filter_desc_, weight + this->weight_offset_ * g,
-              bwd_top_descs_[i], top_diff + top_offset_ * g,
+              bwd_filter_desc_,
+              weight + this->weight_offset_ * g,
+              bwd_top_descs_[i],
+              top_diff + top_offset_ * g,
               bwd_conv_data_descs_[i],
-              bwd_data_algo_[i], pspace, gsize,
+              bwd_data_algo_[i],
+              pspace,
+              gsize,
               cudnn::dataType<Btype>::zero,
-              bwd_bottom_descs_[i], bottom_diff + bottom_offset_ * g));
+              bwd_bottom_descs_[i],
+              bottom_diff + bottom_offset_ * g));
         }
         // Synchronize the work across groups.
         // NOLINT_NEXT_LINE(whitespace/operators)

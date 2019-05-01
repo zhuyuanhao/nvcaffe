@@ -133,7 +133,7 @@ void SGDSolver<Dtype>::PreSolve() {
     temp_.emplace_back(boost::make_shared<TBlob<Dtype>>(shape));
   }
 
-  const size_t N = net_params.size();
+  size_t N = net_params.size();
   larc_g_corr_.resize(N);
   for (size_t i = 0; i < N; ++i) {
     larc_g_corr_[i] = 0.F;

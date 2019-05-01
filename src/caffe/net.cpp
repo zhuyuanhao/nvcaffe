@@ -36,7 +36,8 @@ Net::Net(const NetParameter& param,
       solver_(nullptr),
       solver_rank_(solver_rank),
       solver_init_flag_(solver_init_flag),
-      inner_net_(inner_net) {
+      inner_net_(inner_net),
+      eltwise_mem_sharing_(false) {
   Init(param);
 }
 
@@ -52,7 +53,8 @@ Net::Net(const string& param_file,
       solver_(nullptr),
       solver_rank_(solver_rank),
       solver_init_flag_(solver_init_flag),
-      inner_net_(inner_net) {
+      inner_net_(inner_net),
+      eltwise_mem_sharing_(false) {
   NetParameter param;
   ReadNetParamsFromTextFileOrDie(param_file, &param);
   // Set phase, stages and level
@@ -74,6 +76,7 @@ void Net::Init(const NetParameter& in_param) {
       << "root_net_ needs to be set for all non-root solvers";
   // Set phase from the state.
   phase_ = in_param.state().phase();
+  eltwise_mem_sharing_ = in_param.eltwise_mem_sharing();
   // Filter layers based on their include/exclude rules and
   // the current NetState.
   NetParameter filtered_param;
@@ -690,7 +693,9 @@ float Net::ForwardFromTo(int start, int end) {
     // << " BT " << Type_Name(layers_[i]->backward_type());
     float layer_loss = layers_[i]->Forward(bottom_vecs_[i], top_vecs_[i]);
     loss += layer_loss;
-    if (debug_info_) { ForwardDebugInfo(i); }
+    if (debug_info_) {
+      ForwardDebugInfo(i);
+    }
   }
   ++infer_count_;
   return loss;
@@ -804,7 +809,7 @@ size_t Net::received_contiguous_count(int type_id, const std::set<int>& au_ids,
 }
 
 void Net::ReduceAndUpdate() {
-  DLOG(INFO) << "[" << Caffe::current_device()
+  DLOG(INFO) << "[" << Caffe::device()
              << "] Entering ReduceAndUpdate thread " << lwp_id();
   size_t bucket_size = 0UL;
   std::set<int> au_ids[2];
@@ -812,14 +817,13 @@ void Net::ReduceAndUpdate() {
   const bool clear_grads = !solver_->param().snapshot_diff() && !clip_grads;
   const bool use_buckets = reduce_buckets_ > 0;
   float rate = -1.F;
-  while (!solver_->stop_reducing_requested()) {
+  bool ic = false;
+  while (true) {
     const int param_id = reduction_queue_.pop();
-    SolverAction::Enum request = solver_->GetRequestedAction();
-    if (SolverAction::STOP == request) {
-      solver_->request_early_exit();
-      break;
-    }
     if (param_id == END_OF_TRAIN) {
+      if (!ic) {
+        solver_->iteration_complete_signal();
+      }
       break;
     }
 
@@ -843,12 +847,10 @@ void Net::ReduceAndUpdate() {
       rate = solver_->GetLearningRate();
     }
     if (param_id != END_OF_ITERATION) {
+      ic = false;
       if (Caffe::solver_count() > 1) {
         if (!use_buckets && !clip_grads) {
           Reduce(param_id);
-          if (solver_->stop_reducing_requested()) {
-            break;
-          }
           solver_->ApplyUpdate(param_id, handle, rate, true, clear_grads);
           continue;
         }
@@ -856,15 +858,18 @@ void Net::ReduceAndUpdate() {
         if (!clip_grads) {
           this->learnable_params()[param_id]->scale_diff(1.F / global_grad_scale(), handle);
           solver_->ApplyUpdate(param_id, handle, rate, true, clear_grads);
+          continue;
         }
-        continue;
       }
     } else if (clip_grads && Caffe::solver_count() == 1) {
-      solver_->ClipGradientsAndNormalize(handle, type_id, au_ids[type_id]);
-      for (int i : au_ids[type_id]) {
-        solver_->ApplyUpdate(i, handle, rate, false, clear_grads);
-      }
-      au_ids[type_id].clear();
+      do {
+        solver_->ClipGradientsAndNormalize(handle, type_id, au_ids[type_id]);
+        for (int i : au_ids[type_id]) {
+          solver_->ApplyUpdate(i, handle, rate, false, clear_grads);
+        }
+        au_ids[type_id].clear();
+        type_id = type_id == 0 ? 1 : 0;
+      } while (!au_ids[type_id].empty());  // to process leftovers for other type
     }
 
     bool pass0 = true;
@@ -890,9 +895,6 @@ void Net::ReduceAndUpdate() {
           CHECK_EQ((int) learnable_params_[id_from]->diff_type(), learnable_types_[type_id]);
           ReduceBucket(received_count, learnable_params_[id_from]->diff_type(),
               learnable_params_ptrs_[type_id][id_from]);
-          if (solver_->stop_reducing_requested()) {
-            break;
-          }
           if (clip_grads) {
             solver_->ClipGradientsAndNormalize(handle, type_id, au_ids[type_id]);
           }
@@ -912,14 +914,12 @@ void Net::ReduceAndUpdate() {
       }
       break;
     }
-    if (solver_->stop_reducing_requested()) {
-      break;
-    }
     if (param_id == END_OF_ITERATION) {
       CHECK(au_ids[0].empty());
       CHECK(au_ids[1].empty());
       rate = -1.F;
       solver_->iteration_complete_signal();
+      ic = true;
     } else {
       au_ids[type_id].insert(param_id);
     }
@@ -979,15 +979,15 @@ void Net::ReduceBucket(size_t count, Type bucket_type, void* bucket) {
 }
 
 void Net::ForwardDebugInfo(const int layer_id) {
-  LOG_IF(INFO, Caffe::root_solver())
-      << "[Forward] Layer " << layer_names_[layer_id];
+//  if (phase() == TEST) return;
   for (int top_id = 0; top_id < top_vecs_[layer_id].size(); ++top_id) {
     const Blob& blob = *top_vecs_[layer_id][top_id];
     const string& blob_name = blob_names_[top_id_vecs_[layer_id][top_id]];
-    const double data_abs_val_mean = blob.asum_data() / blob.count();
+    const float data_abs_val_mean = blob.asum_data() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> top blob " << blob_name
-        << ", count: " << blob.count()
+        << "    [Forward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", top blob " << blob_name
         << " data: " << data_abs_val_mean;
   }
   for (int param_id = 0; param_id < layers_[layer_id]->blobs().size();
@@ -997,15 +997,15 @@ void Net::ForwardDebugInfo(const int layer_id) {
     const string& blob_name = param_display_names_[net_param_id];
     const double data_abs_val_mean = blob.asum_data() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> param blob " << blob_name
-        << ", count: " << blob.count()
+        << "    [Forward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", param blob " << blob_name
         << " data: " << data_abs_val_mean;
   }
 }
 
 void Net::BackwardDebugInfo(const int layer_id) {
-  LOG_IF(INFO, Caffe::root_solver())
-      << "[Backward] Layer " << layer_names_[layer_id];
+//  if (phase() == TEST) return;
   const vector<Blob*>& bottom_vec = bottom_vecs_[layer_id];
   for (int bottom_id = 0; bottom_id < bottom_vec.size(); ++bottom_id) {
     if (!bottom_need_backward_[layer_id][bottom_id]) { continue; }
@@ -1013,9 +1013,10 @@ void Net::BackwardDebugInfo(const int layer_id) {
     const string& blob_name = blob_names_[bottom_id_vecs_[layer_id][bottom_id]];
     const double diff_abs_val_mean = blob.asum_diff() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> bottom blob " << blob_name
-        << ", count: " << blob.count()
-        << ", diff: " << diff_abs_val_mean;
+        << "    [Backward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", bottom blob " << blob_name
+        << " diff: " << diff_abs_val_mean; // << " amax: " << blob.amax_diff();
   }
   for (int param_id = 0; param_id < layers_[layer_id]->blobs().size();
        ++param_id) {
@@ -1023,9 +1024,10 @@ void Net::BackwardDebugInfo(const int layer_id) {
     const Blob& blob = *layers_[layer_id]->blobs()[param_id];
     double diff_abs_val_mean = blob.asum_diff() / blob.count();
     LOG_IF(INFO, Caffe::root_solver())
-        << " -> param blob " << param_id
-        << ", count: " << blob.count()
-        << ", diff: " << diff_abs_val_mean;
+        << "    [Backward] "
+        << "Layer " << layer_names_[layer_id]
+        << ", param blob " << param_id
+        << " diff: " << diff_abs_val_mean;
   }
 }
 
@@ -1422,7 +1424,7 @@ void Net::InitializeLearnableDiffSpace(int type_id) {
   LOG(INFO) << print_current_device() << " Reserving "
             << learnable_space_size_[type_id] << " bytes of shared learnable space for type "
             << Type_Name(t);
-  learnable_space_[type_id].reserve(learnable_space_size_[type_id]);
+  learnable_space_[type_id].reserve(learnable_space_size_[type_id], Caffe::device());
   unsigned char* ptr = reinterpret_cast<unsigned char*>(learnable_space_[type_id].data());
   caffe_gpu_memset(learnable_space_size_[type_id], 0, ptr);
   for (int i = 0; i < layers_.size(); ++i) {
@@ -1480,7 +1482,7 @@ std::string Net::print_current_device() const {
   if (P2PManager::global_count() > 0) {
     os << P2PManager::global_rank() << ".";
   }
-  os << Caffe::current_device()
+  os << Caffe::device()
      << (phase_ == TRAIN ? "]" : ")");
   return os.str();
 }

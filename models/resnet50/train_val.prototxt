@@ -1,4 +1,5 @@
 name: "Resnet50"
+eltwise_mem_sharing: true
 
 layer {
   name: "data"

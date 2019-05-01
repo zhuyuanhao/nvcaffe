@@ -19,6 +19,11 @@ AnnotatedDataLayer<Ftype, Btype>::AnnotatedDataLayer(const LayerParameter& param
   : DataLayer<Ftype, Btype>(param, solver_rank) {}
 
 template <typename Ftype, typename Btype>
+AnnotatedDataLayer<Ftype, Btype>::~AnnotatedDataLayer() {
+  this->StopInternalThread();
+}
+
+template <typename Ftype, typename Btype>
 void AnnotatedDataLayer<Ftype, Btype>::DataLayerSetUp(
     const vector<Blob*>& bottom, const vector<Blob*>& top) {
   const LayerParameter& param = this->layer_param();
@@ -70,7 +75,6 @@ void AnnotatedDataLayer<Ftype, Btype>::DataLayerSetUp(
         cache,
         shuffle,
         this->phase_ == TRAIN);
-    start_reading();
   }
 
   label_map_file_ = anno_data_param.label_map_file();
@@ -158,7 +162,7 @@ void AnnotatedDataLayer<Ftype, Btype>::DataLayerSetUp(
 template <typename Ftype, typename Btype>
 bool AnnotatedDataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, size_t queue_id) {
   const bool sample_only = this->sample_only_.load();
-  TBlob<Ftype> transformed_datum;
+  TBlob<Btype> transformed_datum;
 
   //const bool use_gpu_transform = false;//this->is_gpu_transform();
   // Reshape according to the first anno_datum of each batch
@@ -171,20 +175,24 @@ bool AnnotatedDataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, s
 
   const size_t qid = sample_only ? 0UL : queue_id;
   DataReader<AnnotatedDatum>* reader = sample_only ? sample_areader_.get() : areader_.get();
+  CHECK_NOTNULL(reader);
   shared_ptr<AnnotatedDatum> init_datum = reader->full_peek(qid);
   CHECK(init_datum);
+
+  Packing packing = NHWC;  // OpenCV
 
   // Use data_transformer to infer the expected blob shape from datum.
   vector<int> top_shape = this->bdt(thread_id)->InferBlobShape(init_datum->datum());
   transformed_datum.Reshape(top_shape);
   // Reshape batch according to the batch_size.
   top_shape[0] = batch_size;
-  batch->data_->Reshape(top_shape);
-
-  Ftype* top_data = batch->data_->mutable_cpu_data<Ftype>();
-  Ftype* top_label = NULL;  // suppress warnings about uninitialized variables
+  if (top_shape != batch->data_->shape()) {
+    batch->data_->Reshape(top_shape);
+  }
+  Btype* top_data = batch->data_->mutable_cpu_data<Btype>();
+  Btype* top_label = NULL;  // suppress warnings about uninitialized variables
   if (this->output_labels_ && !has_anno_type_) {
-    top_label = batch->label_->mutable_cpu_data<Ftype>();
+    top_label = batch->label_->mutable_cpu_data<Btype>();
   }
 
   // Store transformed annotation.
@@ -238,7 +246,7 @@ bool AnnotatedDataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, s
           ResizeParameter_Resize_mode_FIT_SMALL_SIZE) {
         transformed_datum.Reshape(shape);
         batch->data_->Reshape(shape);
-        top_data = batch->data_->mutable_cpu_data<Ftype>();
+        top_data = batch->data_->mutable_cpu_data<Btype>();
       } else {
         CHECK(std::equal(top_shape.begin() + 1, top_shape.begin() + 4,
               shape.begin() + 1));
@@ -262,7 +270,7 @@ bool AnnotatedDataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, s
         }
         // Transform datum and annotation_group at the same time
         transformed_anno_vec.clear();
-        this->fdt(thread_id)->Transform(sampled_datum, &transformed_datum, &transformed_anno_vec);
+        this->bdt(thread_id)->Transform(sampled_datum, &transformed_datum, &transformed_anno_vec);
         if (anno_type_ == AnnotatedDatum_AnnotationType_BBOX) {
           // Count the number of bboxes.
           for (int g = 0; g < transformed_anno_vec.size(); ++g) {
@@ -273,13 +281,13 @@ bool AnnotatedDataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, s
         }
         all_anno[item_id] = transformed_anno_vec;
       } else {
-        this->fdt(thread_id)->Transform(sampled_datum.datum(), &(transformed_datum));
+        this->bdt(thread_id)->Transform(sampled_datum.datum(), &(transformed_datum));
         // Otherwise, store the label from datum.
         CHECK(sampled_datum.datum().has_label()) << "Cannot find any label.";
         top_label[item_id] = sampled_datum.datum().label();
       }
     } else {
-      this->fdt(thread_id)->Transform(sampled_datum.datum(), &transformed_datum);
+      this->bdt(thread_id)->Transform(sampled_datum.datum(), &transformed_datum);
     }
 
     reader->free_push(queue_id, anno_datum);
@@ -296,12 +304,12 @@ bool AnnotatedDataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, s
         // Store all -1 in the label.
         label_shape[2] = 1;
         batch->label_->Reshape(label_shape);
-        caffe_set<Ftype>(8, -1, batch->label_->mutable_cpu_data<Ftype>());
+        caffe_set<Btype>(8, -1, batch->label_->mutable_cpu_data<Btype>());
       } else {
         // Reshape the label and store the annotation.
         label_shape[2] = num_bboxes;
         batch->label_->Reshape(label_shape);
-        top_label = batch->label_->mutable_cpu_data<Ftype>();
+        top_label = batch->label_->mutable_cpu_data<Btype>();
         int idx = 0;
         for (int item_id = 0; item_id < batch_size; ++item_id) {
           const vector<AnnotationGroup>& anno_vec = all_anno[item_id];
@@ -326,7 +334,7 @@ bool AnnotatedDataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, s
       LOG(FATAL) << "Unknown annotation type.";
     }
   }
-//    batch->set_data_packing(packing); todo
+  batch->set_data_packing(packing);
   batch->set_id(current_batch_id);
   this->sample_only_.store(false);
   return true;

@@ -8,7 +8,7 @@
 #  JPEGTurbo_INCLUDE_DIR
 #  JPEGTurbo_LIBRARIES
 
-find_path(JPEGTurbo_INCLUDE_DIR NAMES turbojpeg.h
+find_path(JPEGTurbo_INCLUDE_DIR turbojpeg.h
                              PATHS /usr/include ${JPEGTurbo_ROOT_DIR} ${JPEGTurbo_ROOT_DIR}/include)
 
 find_library(JPEGTurbo_LIBRARIES SHARED NAMES libturbojpeg.so.0

@@ -1,22 +1,23 @@
 train_net: "models/VGGNet/coco/SSD_300x300/train.prototxt"
 test_net: "models/VGGNet/coco/SSD_300x300/test.prototxt"
-test_iter: 156  #625
-test_interval: 1000
+test_iter: 625
+test_interval: 5000
 
 base_lr: 0.001
 
 lr_policy: "poly"
 power: 2
+solver_data_type: FLOAT
 
 display: 10
-max_iter: 5000 #400000
+max_iter: 40000 #400000
 
 #lr_policy: "multistep"
-#gamma: 0.10000000149
+#gamma: 0.1
 
 momentum: 0.9
 weight_decay: 0.0005
-snapshot: 1000 #40000
+snapshot: 40000
 snapshot_prefix: "models/VGGNet/coco/SSD_300x300/VGG_coco_SSD_300x300"
 solver_mode: GPU
 device_id: 0

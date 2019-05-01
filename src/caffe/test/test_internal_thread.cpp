@@ -12,7 +12,7 @@ namespace caffe {
 class InternalThreadTest : public ::testing::Test {};
 
 TEST_F(InternalThreadTest, TestStartAndExit) {
-  InternalThread thread(Caffe::current_device(), 0U, 1, false);
+  InternalThread thread(Caffe::device(), 0U, 1, false);
   EXPECT_FALSE(thread.is_started());
   thread.StartInternalThread();
   EXPECT_TRUE(thread.is_started());
@@ -25,7 +25,7 @@ class TestThreadA : public InternalThread {
     EXPECT_EQ(4244559767, caffe_rng_rand());
   }
  public:
-  TestThreadA(int device = Caffe::current_device())
+  TestThreadA(int device = Caffe::device())
     : InternalThread(device, 0U, 1, false) {}
 };
 
@@ -34,7 +34,7 @@ class TestThreadB : public InternalThread {
     EXPECT_EQ(1726478280, caffe_rng_rand());
   }
  public:
-  TestThreadB(int device = Caffe::current_device())
+  TestThreadB(int device = Caffe::device())
     : InternalThread(device, 0U, 1, false) {}
 };
 

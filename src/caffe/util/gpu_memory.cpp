@@ -9,37 +9,14 @@ namespace caffe {
 using std::vector;
 
 const int GPUMemory::INVALID_DEVICE = cub::CachingDeviceAllocator::INVALID_DEVICE_ORDINAL;
-const int GPUMemory::WS_INITIAL_SIZE = 16;
 const unsigned int GPUMemory::Manager::BIN_GROWTH = 2;
 const unsigned int GPUMemory::Manager::MIN_BIN = 6;
 const unsigned int GPUMemory::Manager::MAX_BIN = 22;
 const size_t GPUMemory::Manager::MAX_CACHED_BYTES = (size_t) -1;
 const size_t GPUMemory::Manager::MAX_CACHED_SIZE = (1 << GPUMemory::Manager::MAX_BIN);  // 4M
-std::mutex GPUMemory::ws_mutex_init_;
 std::mutex GPUMemory::dev_info_mutex_;
 
 GPUMemory::Manager GPUMemory::mgr_;
-
-vector<shared_ptr<GPUMemory::Workspace>> GPUMemory::workspace_(GPUMemory::WS_INITIAL_SIZE);
-vector<shared_ptr<GPUMemory::Workspace>> GPUMemory::weights_workspace_(GPUMemory::WS_INITIAL_SIZE);
-
-// To be called for every device
-void GPUMemory::InitWorkspaces() {
-  std::lock_guard<std::mutex> lock(ws_mutex_init_);
-  const int device = Caffe::current_device();
-  if (device + 1 > workspace_.size()) {
-    workspace_.resize(device + 1);
-  }
-  if (!workspace_[device]) {
-    workspace_[device] = make_shared<Workspace>(0, device);
-  }
-  if (device + 1 > weights_workspace_.size()) {
-    weights_workspace_.resize(device + 1);
-  }
-  if (!weights_workspace_[device]) {
-    weights_workspace_[device] = make_shared<Workspace>(0, device);
-  }
-}
 
 // If there is a room to grow it tries
 // It keeps what it has otherwise
@@ -62,7 +39,7 @@ bool GPUMemory::Workspace::safe_reserve(size_t size, int device) {
 
 bool GPUMemory::Workspace::try_reserve(size_t size, int device) {
   bool status = true;
-  if (size > size_ || ptr_ == nullptr) {
+  if (size > 0UL && (size > size_ || ptr_ == nullptr)) {
     release();
     if (device != INVALID_DEVICE) {
       device_ = device;  // switch from default to specific one
@@ -139,7 +116,8 @@ bool GPUMemory::Manager::try_allocate(void** ptr, size_t size, int device,
     lazy_init(device);
   }
   CHECK_NOTNULL(ptr);
-  CHECK_EQ(current_device(), device);
+  CHECK_EQ(Caffe::current_device(), device);
+  CHECK_EQ(Caffe::device(), device);
   cudaError_t status = cudaSuccess, last_err = cudaSuccess;
   {
     size_t size_allocated = 0;

@@ -60,8 +60,8 @@ __device__ void amax_reduce_block(volatile T *sdata, T my_max, unsigned int tid)
 __device__ unsigned int amax_blocks_count[REDUCTION_GROUPS_MAX];
 
 void set_amax_blocks_count(unsigned int cnt, int group, cudaStream_t stream) {
-  CUDA_CHECK_ARG(cudaMemcpyToSymbolAsync(amax_blocks_count, &cnt, sizeof(unsigned int),
-      group * sizeof(unsigned int), cudaMemcpyHostToDevice, stream), Caffe::current_device());
+  CUDA_CHECK(cudaMemcpyToSymbolAsync(amax_blocks_count, &cnt, sizeof(unsigned int),
+      group * sizeof(unsigned int), cudaMemcpyHostToDevice, stream));
 }
 
 template<unsigned int BlockSize, bool IsPow2, typename T, typename TR>
@@ -141,7 +141,7 @@ void gpu_amax_t(const int n, const T* x, TR* result, int group) {
   const int threadsPerCta = CAFFE_CUDA_NUM_THREADS_HALF;
   const int nbrCtas = CAFFE_GET_BLOCKS_HALF(n);
   const int reduction_size = (nbrCtas + 1) * sizeof(TR);
-  GPUMemory::Workspace ws(reduction_size, Caffe::current_device());
+  GPUMemory::Workspace ws(reduction_size, Caffe::device());
   TR* dev_ptr_max = reinterpret_cast<TR*>(ws.data());
   set_amax_blocks_count(0U, group, stream);
   if (po2 && n > CAFFE_CUDA_NUM_THREADS_HALF) {
@@ -177,8 +177,8 @@ void caffe_gpu_amax<float16>(const int n, const float16* x, float* y, int group)
   const int n2 = even(n) / 2;
   gpu_amax_t(n2, reinterpret_cast<const half2*>(x), y, group);
 #ifdef DEBUG
-  CHECK(!isnan(*y));
-  CHECK(!isinf(*y));
+  CHECK(!std::isnan(*y));
+  CHECK(!std::isinf(*y));
 #endif
 }
 

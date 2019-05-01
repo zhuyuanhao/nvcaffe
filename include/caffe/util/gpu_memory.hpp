@@ -1,11 +1,13 @@
 #ifndef CAFFE_UTIL_GPU_MEMORY_HPP_
 #define CAFFE_UTIL_GPU_MEMORY_HPP_
 
+#include <boost/shared_ptr.hpp>
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include "caffe/macros.hpp"
 
-#include "caffe/common.hpp"
+using boost::shared_ptr;
 
 namespace cub {
   class CachingDeviceAllocator;
@@ -13,18 +15,11 @@ namespace cub {
 
 namespace caffe {
 
+class CudaStream;
+
 struct GPUMemory {
   static void GetInfo(size_t* free_mem, size_t* used_mem, bool with_update = false) {
     return mgr_.GetInfo(free_mem, used_mem, with_update);
-  }
-
-  static int current_device() {
-    if (Caffe::device_count() == 0) {
-      return INVALID_DEVICE;
-    }
-    int device = 0;
-    CUDA_CHECK(cudaGetDevice(&device));
-    return device;
   }
 
   template <class Any>
@@ -35,7 +30,7 @@ struct GPUMemory {
     }
   }
 
-  static void deallocate(void* ptr, int device = current_device()) {
+  static void deallocate(void* ptr, int device) {
     mgr_.deallocate(ptr, device);
   }
 
@@ -77,10 +72,10 @@ struct GPUMemory {
     size_t size() const { return size_; }
     int device() const { return device_; }
     bool empty() const { return ptr_ == nullptr; }
-    bool safe_reserve(size_t size, int device = current_device());
-    bool try_reserve(size_t size, int device = current_device());
+    bool safe_reserve(size_t size, int device);
+    bool try_reserve(size_t size, int device);
 
-    void reserve(size_t size, int device = current_device()) {
+    void reserve(size_t size, int device) {
       if (!try_reserve(size, device)) {
         LOG(FATAL) << "Out of memory: failed to allocate " << size
             << " bytes on device " << device;
@@ -93,12 +88,6 @@ struct GPUMemory {
         ptr_ = nullptr;
         size_ = 0;
       }
-    }
-
-    void zero_mem() {
-      cudaStream_t stream = Caffe::thread_stream();
-      CUDA_CHECK(cudaMemsetAsync(ptr_, 0, size_, stream));
-      CUDA_CHECK(cudaStreamSynchronize(stream));
     }
 
    private:
@@ -151,10 +140,10 @@ struct GPUMemory {
 
     void update_dev_info(int device);
 
-    vector<DevInfo> dev_info_;
+    std::vector<DevInfo> dev_info_;
     bool initialized_;
     std::unique_ptr<cub::CachingDeviceAllocator> cub_allocator_;
-    vector<size_t> update_thresholds_;
+    std::vector<size_t> update_thresholds_;
 
     static const unsigned int BIN_GROWTH;  ///< Geometric growth factor
     static const unsigned int MIN_BIN;  ///< Minimum bin
@@ -163,21 +152,9 @@ struct GPUMemory {
     static const size_t MAX_CACHED_SIZE;  ///< 2^MAX_BIN
   };
 
-  static std::mutex ws_mutex_init_, dev_info_mutex_;
+  static std::mutex dev_info_mutex_;
   static Manager mgr_;
   static const int INVALID_DEVICE;  ///< Default is invalid: CUB takes care
-
- public:
-  // Workspace used by all Convolution layers one after another.
-  // We carry it global to prevent unnecessary allocations/deallocations
-  // because they hurt performance. It's also shared between TRAIN and TESTS nets.
-  static vector<shared_ptr<Workspace>> workspace_;
-  // This one is for TRAIN only:
-  static vector<shared_ptr<Workspace>> weights_workspace_;
-
-  static void InitWorkspaces();
-
-  static const int WS_INITIAL_SIZE;
 };
 
 }  // namespace caffe

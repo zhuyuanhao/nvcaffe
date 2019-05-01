@@ -80,10 +80,6 @@ class DataReader : public InternalThread {
     }
 
     void just_cached();
-    void register_new_thread() {
-      std::lock_guard<std::mutex> lock(cache_mutex_);
-      cached_flags_.emplace(lwp_id(), make_shared<Flag>());
-    }
 
    private:
     DataCache(size_t threads, bool shuffle)
@@ -98,7 +94,6 @@ class DataReader : public InternalThread {
     boost::barrier cache_bar_;
     bool shuffle_;
     std::atomic_bool just_cached_;
-    std::unordered_map<std::uint32_t, shared_ptr<Flag>> cached_flags_;
     static std::mutex cache_mutex_;
     static unique_ptr<DataCache> data_cache_inst_;
   };
@@ -187,6 +182,7 @@ class DataReader : public InternalThread {
  private:
   int current_rec_;
   int current_queue_;
+  boost::barrier bar_;
   Flag start_reading_flag_;
   bool sample_only_;
   const bool cache_, shuffle_;

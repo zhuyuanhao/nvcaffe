@@ -14,8 +14,8 @@ void ELULayer<Ftype, Btype>::Forward_cpu(const vector<Blob*>& bottom,
   float alpha = this->layer_param_.elu_param().alpha();
   float lambda = this->layer_param_.elu_param().lambda();
   for (int i = 0; i < count; ++i) {
-    top_data[i] = lambda * std::max(bottom_data[i], Ftype(0.))
-        + alpha * (exp(std::min(bottom_data[i], Ftype(0.))) - 1.F);
+    top_data[i] = lambda * (std::max(bottom_data[i], Ftype(0.))
+        + alpha * (exp(std::min(bottom_data[i], Ftype(0.))) - 1.F));
   }
 }
 
@@ -32,8 +32,8 @@ void ELULayer<Ftype, Btype>::Backward_cpu(const vector<Blob*>& top,
     float alpha = this->layer_param_.elu_param().alpha();
     float lambda = this->layer_param_.elu_param().lambda();
     for (int i = 0; i < count; ++i) {
-      bottom_diff[i] = lambda * top_diff[i] * ((bottom_data[i] > 0)
-          + (alpha + top_data[i]) * (bottom_data[i] <= 0));
+      bottom_diff[i] = lambda * (top_diff[i] * ((bottom_data[i] > 0)
+          + (alpha + top_data[i]) * (bottom_data[i] <= 0)));
     }
   }
 }

@@ -166,7 +166,6 @@ DataLayer<Ftype, Btype>::DataLayerSetUp(const vector<Blob*>& bottom, const vecto
         cache,
         shuffle,
         this->phase_ == TRAIN);
-    start_reading();
   }
   // Read a data point, and use it to initialize the top blob.
   shared_ptr<Datum> sample_datum = sample_only_ ? sample_reader_->sample() : reader_->sample();
@@ -271,7 +270,7 @@ bool DataLayer<Ftype, Btype>::load_batch(Batch* batch, int thread_id, size_t que
   Btype* dst_cptr = nullptr;
   if (use_gpu_transform) {
     size_t buffer_size = top_shape[0] * top_shape[1] * init_datum_height * init_datum_width;
-    tmp_gpu_buffer_[thread_id]->safe_reserve(buffer_size);
+    tmp_gpu_buffer_[thread_id]->safe_reserve(buffer_size, Caffe::device());
     dst_gptr = tmp_gpu_buffer_[thread_id]->data();
   } else {
     dst_cptr = batch->data_->template mutable_cpu_data_c<Btype>(false);

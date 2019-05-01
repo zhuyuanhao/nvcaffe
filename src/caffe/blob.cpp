@@ -129,30 +129,6 @@ bool Blob::IsSharedDiffCycled(const vector<Blob*>& others) {
   return false;
 }
 
-bool Blob::IsSharedCycled(const vector<Blob*>& others) {
-  std::unordered_set<const Blob*> node_set;
-  for (auto other : others) {
-    const Blob *data_shared_with = other->data_shared_with_;
-    const Blob *diff_shared_with = other->diff_shared_with_;
-    while (data_shared_with != nullptr ||
-           diff_shared_with != nullptr) {
-      if ((data_shared_with != nullptr && node_set.count(data_shared_with) > 0) ||
-          (diff_shared_with != nullptr && node_set.count(diff_shared_with) > 0)) {
-        return true;
-      }
-      if (data_shared_with != nullptr) {
-        node_set.insert({data_shared_with});
-        data_shared_with = data_shared_with->data_shared_with_;
-      }
-      if (diff_shared_with != nullptr) {
-        node_set.insert({diff_shared_with});
-        diff_shared_with = diff_shared_with->diff_shared_with_;
-      }
-    }
-  }
-  return false;
-}
-
 // The "update" method is used for parameter blobs in a Net, which are stored
 // as TBlob<float> or TBlob<double> -- hence we do not define it for
 // TBlob<int> or TBlob<unsigned int>.
@@ -254,6 +230,7 @@ void Blob::CopyFrom(const Blob& source, bool copy_diff, bool reshape,
   }
   const shared_ptr<Tensor> &srct = copy_diff ? source.diff_tensor_ : source.data_tensor_;
   shared_ptr<Tensor> &dstt = copy_diff ? diff_tensor_ : data_tensor_;
+  CHECK_EQ(srct->count_, dstt->count_);
   const shared_ptr<SyncedMemory> &src = srct->synced_mem();
   shared_ptr<SyncedMemory> &dst = dstt->mutable_synced_mem();
   if (src->head() == SyncedMemory::UNINITIALIZED) {
@@ -273,7 +250,6 @@ void Blob::CopyFrom(const Blob& source, bool copy_diff, bool reshape,
     }
     do {
       if (src_type == dst_type) {
-        CHECK_EQ(srct->count_, dstt->count_);
         // cross copy
         if (srct->is_cpu_head() && dstt->is_gpu_head()) {
           cudaStream_t stream = Caffe::thread_stream(group);

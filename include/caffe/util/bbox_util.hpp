@@ -193,12 +193,12 @@ void MineHardExamples(const Blob& conf_blob,
 //    all_gt_bboxes: stores ground truth for each image. Label of each bbox is
 //      stored in NormalizedBBox.
 template <typename Dtype>
-void GetGroundTruth(const Dtype* gt_data, const int num_classes, const int num_gt,
+void GetGroundTruth(const Dtype* gt_data, const int num_gt,
       const int background_label_id, const bool use_difficult_gt,
       map<int, vector<NormalizedBBox> >* all_gt_bboxes);
 // Store ground truth bboxes of same label in a group.
 template <typename Dtype>
-void GetGroundTruth(const Dtype* gt_data, const int num_classes, const int num_gt,
+void GetGroundTruth(const Dtype* gt_data, const int num_gt,
       const int background_label_id, const bool use_difficult_gt,
       map<int, LabelBBox>* all_gt_bboxes);
 

@@ -15,7 +15,7 @@ void CuDNNDropoutLayer<Ftype, Btype>::LayerSetUp(const vector<Blob*>& bottom,
   // initialize dropout state
   CUDNN_CHECK(cudnnCreateDropoutDescriptor(&dropout_desc_));
   CUDNN_CHECK(cudnnDropoutGetStatesSize(Caffe::cudnn_handle(0), &state_size_));
-  states_.reserve(state_size_);
+  states_.reserve(state_size_, Caffe::device());
 
   // setup dropout descriptor
   CUDNN_CHECK(cudnnSetDropoutDescriptor(dropout_desc_,
@@ -40,9 +40,8 @@ void CuDNNDropoutLayer<Ftype, Btype>::Reshape(const vector<Blob*>& bottom,
   cudnn::setTensor4dDesc<Ftype>(&bottom_desc_, N, K, H, W);
   cudnn::setTensor4dDesc<Ftype>(&top_desc_, N, K, H, W);
 
-  CUDNN_CHECK(cudnnDropoutGetReserveSpaceSize(bottom_desc_,
-                                              &reserve_space_size_));
-  reserve_space_.reserve(reserve_space_size_);
+  CUDNN_CHECK(cudnnDropoutGetReserveSpaceSize(bottom_desc_, &reserve_space_size_));
+  reserve_space_.reserve(reserve_space_size_, Caffe::device());
 }
 
 template <typename Ftype, typename Btype>

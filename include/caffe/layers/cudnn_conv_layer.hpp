@@ -42,10 +42,6 @@ class CuDNNConvolutionLayer : public ConvolutionLayer<Ftype, Btype> {
   static constexpr int REQUEST_ALGO_COUNT = 1;
   static constexpr int ATTEMPTS_TO_RESERVE_WS = 3;
 
-  static std::atomic<size_t> train_mem_req_all_grps_;
-  static std::atomic<size_t> test_mem_req_all_grps_;
-  static std::atomic<size_t> train_tmp_weights_mem_;
-
  public:
   explicit CuDNNConvolutionLayer(const LayerParameter& param)
       : ConvolutionLayer<Ftype, Btype>(param), handles_setup_(false),
@@ -94,7 +90,6 @@ class CuDNNConvolutionLayer : public ConvolutionLayer<Ftype, Btype> {
 
  private:
   bool use_algo_seeker_;
-
   bool use_reshape_;
   bool initialized_cached_descs_;
   size_t fwd_count_, bwd_count_;
@@ -110,7 +105,7 @@ class CuDNNConvolutionLayer : public ConvolutionLayer<Ftype, Btype> {
   void GetConvAlgo(const vector<Blob*>& bottom, const vector<Blob*>& top,
       const size_t workspace_bytes, int pad_h, int pad_w, int stride_h, int stride_w);
 
-  void AllocateFindExWorkspace();
+  size_t AllocateFindExWorkspace();
   size_t AllocateWorkspace(size_t bottom_size);
 
   vector<cudnnTensorDescriptor_t> fwd_cached_bottom_descs_, bwd_cached_bottom_descs_;
@@ -158,13 +153,6 @@ template<typename Ftype, typename Btype>
 constexpr int CuDNNConvolutionLayer<Ftype, Btype>::REQUEST_ALGO_COUNT;
 template<typename Ftype, typename Btype>
 constexpr int CuDNNConvolutionLayer<Ftype, Btype>::ATTEMPTS_TO_RESERVE_WS;
-
-template<typename Ftype, typename Btype>
-std::atomic<size_t> CuDNNConvolutionLayer<Ftype, Btype>::train_mem_req_all_grps_;
-template<typename Ftype, typename Btype>
-std::atomic<size_t> CuDNNConvolutionLayer<Ftype, Btype>::test_mem_req_all_grps_;
-template<typename Ftype, typename Btype>
-std::atomic<size_t> CuDNNConvolutionLayer<Ftype, Btype>::train_tmp_weights_mem_;
 
 #endif
 

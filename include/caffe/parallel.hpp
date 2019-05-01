@@ -54,7 +54,7 @@ class P2PManager {
   ~P2PManager();
 
   void Run(const vector<int>& gpus);
-  void EarlyCancel(P2PSync* killed);
+  void cancel_all(P2PSync* killed);
 
 #ifdef USE_NCCL
   const ncclUniqueId& nccl_id() {
@@ -62,8 +62,8 @@ class P2PManager {
   }
 #endif
 
-  void bar_wait() {
-    bar_.wait();
+  void bar_wait(int b) {
+    bar_[b]->wait();
   }
 
   static void Init(int *argc, char ***argv);
@@ -88,7 +88,7 @@ class P2PManager {
 #ifdef USE_NCCL
   ncclUniqueId nccl_id_;
 #endif
-  boost::barrier bar_;
+  static unique_ptr<boost::barrier> bar_[3];
 
   static int global_rank_;
   static int global_count_;
@@ -108,7 +108,8 @@ class P2PSync : public Solver::Callback, public InternalThread {
 
   void allreduce(int param_id) override;
   void allreduce_bucket(size_t count, void* bucket, Type type) override;
-  void soft_barrier() override;
+  void soft_barrier(int b) override;
+  void cancel_all() override;
   void saveTestResults(float loss, const vector<float>& scores) override;
   void aggregateTestResults(float* loss, vector<float>* scores) override;
 

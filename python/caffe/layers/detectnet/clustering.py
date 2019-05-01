@@ -187,14 +187,14 @@ def vote_boxes(propose_boxes, propose_cvgs, mask, self):
     # GROUP RECTANGLES Clustering
     ######################################################################
     nboxes, weights = cv.groupRectangles(
-        np.array(propose_boxes).tolist(),
+        [[e[0],e[1],e[2]-e[0],e[3]-e[1]] for e in np.array(propose_boxes).tolist()],
         self.gridbox_rect_thresh,
         self.gridbox_rect_eps)
     if len(nboxes):
         for rect, weight in zip(nboxes, weights):
-            if (rect[3] - rect[1]) >= self.min_height:
+            if rect[3] >= self.min_height:
                 confidence = math.log(weight[0])
-                detection = [rect[0], rect[1], rect[2], rect[3], confidence]
+                detection = [rect[0], rect[1], rect[0]+rect[2], rect[1]+rect[3], confidence]
                 detections_per_image.append(detection)
 
     return detections_per_image
