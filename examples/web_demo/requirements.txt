@@ -3,5 +3,5 @@ flask
 tornado
 numpy
 pandas
-pillow
+pillow=>6.2.0
 pyyaml
